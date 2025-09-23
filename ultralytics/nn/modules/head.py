@@ -1,9 +1,10 @@
 # Ultralytics 🚀 AGPL-3.0 License - https://ultralytics.com/license
 """Model head modules."""
 
+from __future__ import annotations
+
 import copy
 import math
-from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
@@ -11,8 +12,8 @@ import torch.nn.functional as F
 from torch.nn.init import constant_, xavier_uniform_
 
 from ultralytics.utils import NOT_MACOS14
-from ultralytics.utils.tal import TORCH_1_10, dist2bbox, dist2rbox, make_anchors
-from ultralytics.utils.torch_utils import fuse_conv_and_bn, smart_inference_mode
+from ultralytics.utils.tal import dist2bbox, dist2rbox, make_anchors
+from ultralytics.utils.torch_utils import TORCH_1_11, fuse_conv_and_bn, smart_inference_mode
 
 from .block import DFL, SAVPE, BNContrastiveHead, ContrastiveHead, Proto, Residual, SwiGLUFFN
 from .conv import Conv, DWConv
@@ -76,7 +77,7 @@ class Detect(nn.Module):
     legacy = False  # backward compatibility for v3/v5/v8/v9 models
     xyxy = False  # xyxy or xywh output
 
-    def __init__(self, nc: int = 80, ch: Tuple = ()):
+    def __init__(self, nc: int = 80, ch: tuple = ()):
         """
         Initialize the YOLO detection layer with specified number of classes and channels.
 
@@ -112,7 +113,7 @@ class Detect(nn.Module):
             self.one2one_cv2 = copy.deepcopy(self.cv2)
             self.one2one_cv3 = copy.deepcopy(self.cv3)
 
-    def forward(self, x: List[torch.Tensor]) -> Union[List[torch.Tensor], Tuple]:
+    def forward(self, x: list[torch.Tensor]) -> list[torch.Tensor] | tuple:
         """Concatenate and return predicted bounding boxes and class probabilities."""
         if self.end2end:
             return self.forward_end2end(x)
@@ -124,12 +125,12 @@ class Detect(nn.Module):
         y = self._inference(x)
         return y if self.export else (y, x)
 
-    def forward_end2end(self, x: List[torch.Tensor]) -> Union[dict, Tuple]:
+    def forward_end2end(self, x: list[torch.Tensor]) -> dict | tuple:
         """
         Perform forward pass of the v10Detect module.
 
         Args:
-            x (List[torch.Tensor]): Input feature maps from different levels.
+            x (list[torch.Tensor]): Input feature maps from different levels.
 
         Returns:
             outputs (dict | tuple): Training mode returns dict with one2many and one2one outputs.
@@ -148,12 +149,12 @@ class Detect(nn.Module):
         y = self.postprocess(y.permute(0, 2, 1), self.max_det, self.nc)
         return y if self.export else (y, {"one2many": x, "one2one": one2one})
 
-    def _inference(self, x: List[torch.Tensor]) -> torch.Tensor:
+    def _inference(self, x: list[torch.Tensor]) -> torch.Tensor:
         """
         Decode predicted bounding boxes and class probabilities based on multiple-level feature maps.
 
         Args:
-            x (List[torch.Tensor]): List of feature maps from different detection layers.
+            x (list[torch.Tensor]): List of feature maps from different detection layers.
 
         Returns:
             (torch.Tensor): Concatenated tensor of decoded bounding boxes and class probabilities.
@@ -161,7 +162,7 @@ class Detect(nn.Module):
         # Inference path
         shape = x[0].shape  # BCHW
         x_cat = torch.cat([xi.view(shape[0], self.no, -1) for xi in x], 2)
-        if self.format != "imx" and (self.dynamic or self.shape != shape):
+        if self.dynamic or self.shape != shape:
             self.anchors, self.strides = (x.transpose(0, 1) for x in make_anchors(x, self.stride, 0.5))
             self.shape = shape
 
@@ -181,8 +182,6 @@ class Detect(nn.Module):
             dbox = self.decode_bboxes(self.dfl(box) * norm, self.anchors.unsqueeze(0) * norm[:, :2])
         else:
             dbox = self.decode_bboxes(self.dfl(box), self.anchors.unsqueeze(0)) * self.strides
-        if self.export and self.format == "imx":
-            return dbox.transpose(1, 2), cls.sigmoid().permute(0, 2, 1)
         return torch.cat((dbox, cls.sigmoid()), 1)
 
     def bias_init(self):
@@ -254,7 +253,7 @@ class Segment(Detect):
         >>> outputs = segment(x)
     """
 
-    def __init__(self, nc: int = 80, nm: int = 32, npr: int = 256, ch: Tuple = ()):
+    def __init__(self, nc: int = 80, nm: int = 32, npr: int = 256, ch: tuple = ()):
         """
         Initialize the YOLO model attributes such as the number of masks, prototypes, and the convolution layers.
 
@@ -272,7 +271,7 @@ class Segment(Detect):
         c4 = max(ch[0] // 4, self.nm)
         self.cv4 = nn.ModuleList(nn.Sequential(Conv(x, c4, 3), Conv(c4, c4, 3), nn.Conv2d(c4, self.nm, 1)) for x in ch)
 
-    def forward(self, x: List[torch.Tensor]) -> Union[Tuple, List[torch.Tensor]]:
+    def forward(self, x: list[torch.Tensor]) -> tuple | list[torch.Tensor]:
         """Return model outputs and mask coefficients if training, otherwise return outputs and mask coefficients."""
         p = self.proto(x[0])  # mask protos
         bs = p.shape[0]  # batch size
@@ -306,7 +305,7 @@ class OBB(Detect):
         >>> outputs = obb(x)
     """
 
-    def __init__(self, nc: int = 80, ne: int = 1, ch: Tuple = ()):
+    def __init__(self, nc: int = 80, ne: int = 1, ch: tuple = ()):
         """
         Initialize OBB with number of classes `nc` and layer channels `ch`.
 
@@ -321,7 +320,7 @@ class OBB(Detect):
         c4 = max(ch[0] // 4, self.ne)
         self.cv4 = nn.ModuleList(nn.Sequential(Conv(x, c4, 3), Conv(c4, c4, 3), nn.Conv2d(c4, self.ne, 1)) for x in ch)
 
-    def forward(self, x: List[torch.Tensor]) -> Union[torch.Tensor, Tuple]:
+    def forward(self, x: list[torch.Tensor]) -> torch.Tensor | tuple:
         """Concatenate and return predicted bounding boxes and class probabilities."""
         bs = x[0].shape[0]  # batch size
         angle = torch.cat([self.cv4[i](x[i]).view(bs, self.ne, -1) for i in range(self.nl)], 2)  # OBB theta logits
@@ -362,7 +361,7 @@ class Pose(Detect):
         >>> outputs = pose(x)
     """
 
-    def __init__(self, nc: int = 80, kpt_shape: Tuple = (17, 3), ch: Tuple = ()):
+    def __init__(self, nc: int = 80, kpt_shape: tuple = (17, 3), ch: tuple = ()):
         """
         Initialize YOLO network with default parameters and Convolutional Layers.
 
@@ -378,7 +377,7 @@ class Pose(Detect):
         c4 = max(ch[0] // 4, self.nk)
         self.cv4 = nn.ModuleList(nn.Sequential(Conv(x, c4, 3), Conv(c4, c4, 3), nn.Conv2d(c4, self.nk, 1)) for x in ch)
 
-    def forward(self, x: List[torch.Tensor]) -> Union[torch.Tensor, Tuple]:
+    def forward(self, x: list[torch.Tensor]) -> torch.Tensor | tuple:
         """Perform forward pass through YOLO model and return predictions."""
         bs = x[0].shape[0]  # batch size
         kpt = torch.cat([self.cv4[i](x[i]).view(bs, self.nk, -1) for i in range(self.nl)], -1)  # (bs, 17*3, h*w)
@@ -386,8 +385,6 @@ class Pose(Detect):
         if self.training:
             return x, kpt
         pred_kpt = self.kpts_decode(bs, kpt)
-        if self.export and self.format == "imx":
-            return (*x, pred_kpt.permute(0, 2, 1))
         return torch.cat([x, pred_kpt], 1) if self.export else (torch.cat([x[0], pred_kpt], 1), (x[1], kpt))
 
     def kpts_decode(self, bs: int, kpts: torch.Tensor) -> torch.Tensor:
@@ -448,7 +445,7 @@ class Classify(nn.Module):
 
     export = False  # export mode
 
-    def __init__(self, c1: int, c2: int, k: int = 1, s: int = 1, p: Optional[int] = None, g: int = 1):
+    def __init__(self, c1: int, c2: int, k: int = 1, s: int = 1, p: int | None = None, g: int = 1):
         """
         Initialize YOLO classification head to transform input tensor from (b,c1,20,20) to (b,c2) shape.
 
@@ -467,7 +464,7 @@ class Classify(nn.Module):
         self.drop = nn.Dropout(p=0.0, inplace=True)
         self.linear = nn.Linear(c_, c2)  # to x(b,c2)
 
-    def forward(self, x: Union[List[torch.Tensor], torch.Tensor]) -> Union[torch.Tensor, Tuple]:
+    def forward(self, x: list[torch.Tensor] | torch.Tensor) -> torch.Tensor | tuple:
         """Perform forward pass of the YOLO model on input image data."""
         if isinstance(x, list):
             x = torch.cat(x, 1)
@@ -501,7 +498,7 @@ class WorldDetect(Detect):
         >>> outputs = world_detect(x, text)
     """
 
-    def __init__(self, nc: int = 80, embed: int = 512, with_bn: bool = False, ch: Tuple = ()):
+    def __init__(self, nc: int = 80, embed: int = 512, with_bn: bool = False, ch: tuple = ()):
         """
         Initialize YOLO detection layer with nc classes and layer channels ch.
 
@@ -516,7 +513,7 @@ class WorldDetect(Detect):
         self.cv3 = nn.ModuleList(nn.Sequential(Conv(x, c3, 3), Conv(c3, c3, 3), nn.Conv2d(c3, embed, 1)) for x in ch)
         self.cv4 = nn.ModuleList(BNContrastiveHead(embed) if with_bn else ContrastiveHead() for _ in ch)
 
-    def forward(self, x: List[torch.Tensor], text: torch.Tensor) -> Union[List[torch.Tensor], Tuple]:
+    def forward(self, x: list[torch.Tensor], text: torch.Tensor) -> list[torch.Tensor] | tuple:
         """Concatenate and return predicted bounding boxes and class probabilities."""
         for i in range(self.nl):
             x[i] = torch.cat((self.cv2[i](x[i]), self.cv4[i](self.cv3[i](x[i]), text)), 1)
@@ -585,7 +582,7 @@ class LRPCHead(nn.Module):
         linear.bias.data = conv.bias.data
         return linear
 
-    def forward(self, cls_feat: torch.Tensor, loc_feat: torch.Tensor, conf: float) -> Tuple[Tuple, torch.Tensor]:
+    def forward(self, cls_feat: torch.Tensor, loc_feat: torch.Tensor, conf: float) -> tuple[tuple, torch.Tensor]:
         """Process classification and localization features to generate detection proposals."""
         if self.enabled:
             pf_score = self.pf(cls_feat)[0, 0].flatten(0)
@@ -634,7 +631,7 @@ class YOLOEDetect(Detect):
 
     is_fused = False
 
-    def __init__(self, nc: int = 80, embed: int = 512, with_bn: bool = False, ch: Tuple = ()):
+    def __init__(self, nc: int = 80, embed: int = 512, with_bn: bool = False, ch: tuple = ()):
         """
         Initialize YOLO detection layer with nc classes and layer channels ch.
 
@@ -714,11 +711,11 @@ class YOLOEDetect(Detect):
         self.reprta = nn.Identity()
         self.is_fused = True
 
-    def get_tpe(self, tpe: Optional[torch.Tensor]) -> Optional[torch.Tensor]:
+    def get_tpe(self, tpe: torch.Tensor | None) -> torch.Tensor | None:
         """Get text prompt embeddings with normalization."""
         return None if tpe is None else F.normalize(self.reprta(tpe), dim=-1, p=2)
 
-    def get_vpe(self, x: List[torch.Tensor], vpe: torch.Tensor) -> torch.Tensor:
+    def get_vpe(self, x: list[torch.Tensor], vpe: torch.Tensor) -> torch.Tensor:
         """Get visual prompt embeddings with spatial awareness."""
         if vpe.shape[1] == 0:  # no visual prompt embeddings
             return torch.zeros(x[0].shape[0], 0, self.embed, device=x[0].device)
@@ -727,7 +724,7 @@ class YOLOEDetect(Detect):
         assert vpe.ndim == 3  # (B, N, D)
         return vpe
 
-    def forward_lrpc(self, x: List[torch.Tensor], return_mask: bool = False) -> Union[torch.Tensor, Tuple]:
+    def forward_lrpc(self, x: list[torch.Tensor], return_mask: bool = False) -> torch.Tensor | tuple:
         """Process features with fused text embeddings to generate detections for prompt-free model."""
         masks = []
         assert self.is_fused, "Prompt-free inference requires model to be fused!"
@@ -765,9 +762,7 @@ class YOLOEDetect(Detect):
         else:
             return y if self.export else (y, x)
 
-    def forward(
-        self, x: List[torch.Tensor], cls_pe: torch.Tensor, return_mask: bool = False
-    ) -> Union[torch.Tensor, Tuple]:
+    def forward(self, x: list[torch.Tensor], cls_pe: torch.Tensor, return_mask: bool = False) -> torch.Tensor | tuple:
         """Process features with class prompt embeddings to generate detections."""
         if hasattr(self, "lrpc"):  # for prompt-free inference
             return self.forward_lrpc(x, return_mask)
@@ -816,7 +811,7 @@ class YOLOESegment(YOLOEDetect):
     """
 
     def __init__(
-        self, nc: int = 80, nm: int = 32, npr: int = 256, embed: int = 512, with_bn: bool = False, ch: Tuple = ()
+        self, nc: int = 80, nm: int = 32, npr: int = 256, embed: int = 512, with_bn: bool = False, ch: tuple = ()
     ):
         """
         Initialize YOLOESegment with class count, mask parameters, and embedding dimensions.
@@ -837,7 +832,7 @@ class YOLOESegment(YOLOEDetect):
         c5 = max(ch[0] // 4, self.nm)
         self.cv5 = nn.ModuleList(nn.Sequential(Conv(x, c5, 3), Conv(c5, c5, 3), nn.Conv2d(c5, self.nm, 1)) for x in ch)
 
-    def forward(self, x: List[torch.Tensor], text: torch.Tensor) -> Union[Tuple, torch.Tensor]:
+    def forward(self, x: list[torch.Tensor], text: torch.Tensor) -> tuple | torch.Tensor:
         """Return model outputs and mask coefficients if training, otherwise return outputs and mask coefficients."""
         p = self.proto(x[0])  # mask protos
         bs = p.shape[0]  # batch size
@@ -905,7 +900,7 @@ class RTDETRDecoder(nn.Module):
     def __init__(
         self,
         nc: int = 80,
-        ch: Tuple = (512, 1024, 2048),
+        ch: tuple = (512, 1024, 2048),
         hd: int = 256,  # hidden dim
         nq: int = 300,  # num queries
         ndp: int = 4,  # num decoder points
@@ -981,12 +976,12 @@ class RTDETRDecoder(nn.Module):
 
         self._reset_parameters()
 
-    def forward(self, x: List[torch.Tensor], batch: Optional[dict] = None) -> Union[Tuple, torch.Tensor]:
+    def forward(self, x: list[torch.Tensor], batch: dict | None = None) -> tuple | torch.Tensor:
         """
         Run the forward pass of the module, returning bounding box and classification scores for the input.
 
         Args:
-            x (List[torch.Tensor]): List of feature maps from the backbone.
+            x (list[torch.Tensor]): List of feature maps from the backbone.
             batch (dict, optional): Batch information for training.
 
         Returns:
@@ -1033,12 +1028,12 @@ class RTDETRDecoder(nn.Module):
 
     def _generate_anchors(
         self,
-        shapes: List[List[int]],
+        shapes: list[list[int]],
         grid_size: float = 0.05,
         dtype: torch.dtype = torch.float32,
         device: str = "cpu",
         eps: float = 1e-2,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Generate anchor bounding boxes for given shapes with specific grid size and validate them.
 
@@ -1057,7 +1052,7 @@ class RTDETRDecoder(nn.Module):
         for i, (h, w) in enumerate(shapes):
             sy = torch.arange(end=h, dtype=dtype, device=device)
             sx = torch.arange(end=w, dtype=dtype, device=device)
-            grid_y, grid_x = torch.meshgrid(sy, sx, indexing="ij") if TORCH_1_10 else torch.meshgrid(sy, sx)
+            grid_y, grid_x = torch.meshgrid(sy, sx, indexing="ij") if TORCH_1_11 else torch.meshgrid(sy, sx)
             grid_xy = torch.stack([grid_x, grid_y], -1)  # (h, w, 2)
 
             valid_WH = torch.tensor([w, h], dtype=dtype, device=device)
@@ -1071,12 +1066,12 @@ class RTDETRDecoder(nn.Module):
         anchors = anchors.masked_fill(~valid_mask, float("inf"))
         return anchors, valid_mask
 
-    def _get_encoder_input(self, x: List[torch.Tensor]) -> Tuple[torch.Tensor, List[List[int]]]:
+    def _get_encoder_input(self, x: list[torch.Tensor]) -> tuple[torch.Tensor, list[list[int]]]:
         """
         Process and return encoder inputs by getting projection features from input and concatenating them.
 
         Args:
-            x (List[torch.Tensor]): List of feature maps from the backbone.
+            x (list[torch.Tensor]): List of feature maps from the backbone.
 
         Returns:
             feats (torch.Tensor): Processed features.
@@ -1101,10 +1096,10 @@ class RTDETRDecoder(nn.Module):
     def _get_decoder_input(
         self,
         feats: torch.Tensor,
-        shapes: List[List[int]],
-        dn_embed: Optional[torch.Tensor] = None,
-        dn_bbox: Optional[torch.Tensor] = None,
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        shapes: list[list[int]],
+        dn_embed: torch.Tensor | None = None,
+        dn_bbox: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Generate and prepare the input required for the decoder from the provided features and shapes.
 
@@ -1209,7 +1204,7 @@ class v10Detect(Detect):
 
     end2end = True
 
-    def __init__(self, nc: int = 80, ch: Tuple = ()):
+    def __init__(self, nc: int = 80, ch: tuple = ()):
         """
         Initialize the v10Detect object with the specified number of classes and input channels.
 
