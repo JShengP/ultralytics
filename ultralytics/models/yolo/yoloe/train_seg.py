@@ -19,7 +19,7 @@ class YOLOESegTrainer(YOLOETrainer, SegmentationTrainer):
     Attributes:
         cfg (dict): Configuration dictionary with training parameters.
         overrides (dict): Dictionary with parameter overrides.
-        _callbacks (list): List of callback functions for training events.
+        _callbacks (dict): Dictionary of callback functions for training events.
     """
 
     def get_model(self, cfg=None, weights=None, verbose=True):
@@ -39,7 +39,7 @@ class YOLOESegTrainer(YOLOETrainer, SegmentationTrainer):
             cfg["yaml_file"] if isinstance(cfg, dict) else cfg,
             ch=self.data["channels"],
             nc=min(self.data["nc"], 80),
-            verbose=verbose and RANK == -1,
+            verbose=verbose and RANK in {-1, 0},
         )
         if weights:
             model.load(weights)
@@ -85,7 +85,7 @@ class YOLOEPESegTrainer(SegmentationTrainer):
             cfg["yaml_file"] if isinstance(cfg, dict) else cfg,
             ch=self.data["channels"],
             nc=self.data["nc"],
-            verbose=verbose and RANK == -1,
+            verbose=verbose and RANK in {-1, 0},
         )
 
         del model.model[-1].savpe
@@ -104,7 +104,12 @@ class YOLOEPESegTrainer(SegmentationTrainer):
         model.model[-1].cv3[0][2] = deepcopy(model.model[-1].cv3[0][2]).requires_grad_(True)
         model.model[-1].cv3[1][2] = deepcopy(model.model[-1].cv3[1][2]).requires_grad_(True)
         model.model[-1].cv3[2][2] = deepcopy(model.model[-1].cv3[2][2]).requires_grad_(True)
-        del model.pe
+
+        if getattr(model.model[-1], "one2one_cv3", None) is not None:
+            model.model[-1].one2one_cv3[0][2] = deepcopy(model.model[-1].cv3[0][2]).requires_grad_(True)
+            model.model[-1].one2one_cv3[1][2] = deepcopy(model.model[-1].cv3[1][2]).requires_grad_(True)
+            model.model[-1].one2one_cv3[2][2] = deepcopy(model.model[-1].cv3[2][2]).requires_grad_(True)
+
         model.train()
 
         return model

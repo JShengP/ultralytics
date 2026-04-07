@@ -52,13 +52,13 @@ class WorldTrainer(DetectionTrainer):
         >>> trainer.train()
     """
 
-    def __init__(self, cfg=DEFAULT_CFG, overrides: dict[str, Any] | None = None, _callbacks=None):
+    def __init__(self, cfg=DEFAULT_CFG, overrides: dict[str, Any] | None = None, _callbacks: dict | None = None):
         """Initialize a WorldTrainer object with given arguments.
 
         Args:
             cfg (dict[str, Any]): Configuration for the trainer.
             overrides (dict[str, Any], optional): Configuration overrides.
-            _callbacks (list[Any], optional): List of callback functions.
+            _callbacks (dict, optional): Dictionary of callback functions.
         """
         if overrides is None:
             overrides = {}
@@ -83,7 +83,7 @@ class WorldTrainer(DetectionTrainer):
             cfg["yaml_file"] if isinstance(cfg, dict) else cfg,
             ch=self.data["channels"],
             nc=min(self.data["nc"], 80),
-            verbose=verbose and RANK == -1,
+            verbose=verbose and RANK in {-1, 0},
         )
         if weights:
             model.load(weights)
