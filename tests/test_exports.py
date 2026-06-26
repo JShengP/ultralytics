@@ -183,8 +183,20 @@ def test_export_onnx_matrix(task, dynamic, int8, half, batch, simplify, nms, end
         nms=nms,
         end2end=end2end,
     )
-    YOLO(file)([SOURCE] * batch, imgsz=64 if dynamic else 32)  # exported model inference
+    r = YOLO(file)([SOURCE] * batch, imgsz=64 if dynamic else 32)  # exported model inference
+    if task == "semantic":
+        assert r[0].semantic_mask is not None
+        assert r[0].semantic_mask.data.dtype in {torch.uint8, torch.int32}
     Path(file).unlink()  # cleanup
+
+
+def test_export_onnx_semantic_dnn():
+    """Test semantic ONNX class-map output with OpenCV DNN."""
+    skip_rpi_semantic("semantic")
+    file = YOLO(TASK2MODEL["semantic"]).export(format="onnx", imgsz=32)
+    r = YOLO(file).predict(SOURCE, imgsz=32, dnn=True)
+    assert r[0].semantic_mask is not None
+    Path(file).unlink()
 
 
 @pytest.mark.slow
@@ -275,7 +287,13 @@ def test_export_tflite_matrix(task, dynamic, int8, half, batch, nms, end2end):
     file = YOLO(TASK2MODEL[task]).export(
         format="tflite", imgsz=32, dynamic=dynamic, int8=int8, half=half, batch=batch, nms=nms, end2end=end2end
     )
-    YOLO(file)([SOURCE] * batch, imgsz=32)  # exported model inference
+    r = YOLO(file)([SOURCE] * batch, imgsz=32)  # exported model inference
+    if task == "semantic":
+        mask = r[0].semantic_mask
+        assert mask is not None
+        assert mask.data.dtype in {torch.uint8, torch.int32}
+        # Class IDs must stay within [0, nc): catches the uint8 overflow when boxes denorm is wrongly applied
+        assert int(mask.data.max()) < len(r[0].names)
     Path(file).unlink()  # cleanup
 
 
@@ -457,7 +475,7 @@ def test_export_executorch_matrix(task):
 
 @pytest.mark.slow
 @pytest.mark.skipif(not TORCH_2_8 or TORCH_2_12, reason="Axelera export requires 2.8.0<=torch<2.12.0")
-@pytest.mark.skipif(checks.IS_PYTHON_MINIMUM_3_13, reason="Axelera devkit 1.6.0 does not support Python 3.13")
+@pytest.mark.skipif(checks.IS_PYTHON_MINIMUM_3_13, reason="Axelera devkit 1.7.0 does not support Python 3.13")
 @pytest.mark.skipif(
     not LINUX or (ARM64 and IS_DOCKER),
     reason="Axelera export is only supported on Linux and is not supported on ARM64 Docker",

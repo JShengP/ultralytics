@@ -1,4 +1,5 @@
 ---
+title: YOLO Export to Qualcomm QNN (Snapdragon)
 comments: true
 description: Export Ultralytics YOLO models to Qualcomm QNN for fast on-device inference on Snapdragon Hexagon NPU, Adreno GPU, and CPU. Step-by-step Qualcomm Snapdragon export guide.
 keywords: Qualcomm QNN, Qualcomm export, Snapdragon export, export YOLO to Qualcomm, QNN export, YOLO Snapdragon, YOLO on Snapdragon, Qualcomm AI Hub, Hexagon NPU, Hexagon HTP, Qualcomm AI Engine Direct, QAIRT, SNPE, onnxruntime-qnn, ONNX Runtime QNN, Snapdragon NPU, on-device inference, edge AI deployment, Ultralytics YOLO, model export
@@ -85,14 +86,14 @@ End-to-end single-image inference for the official YOLO26n models on a Lenovo la
 
 QNN export supports the standard task set available in each model family, including YOLO26 semantic segmentation.
 
-| Task                                                                 | Supported |
-| :------------------------------------------------------------------- | :-------- |
-| [Object Detection](https://docs.ultralytics.com/tasks/detect)        | ✅        |
-| [Instance Segmentation](https://docs.ultralytics.com/tasks/segment)  | ✅        |
-| [Semantic Segmentation](https://docs.ultralytics.com/tasks/semantic) | ✅        |
-| [Pose Estimation](https://docs.ultralytics.com/tasks/pose)           | ✅        |
-| [OBB Detection](https://docs.ultralytics.com/tasks/obb)              | ✅        |
-| [Classification](https://docs.ultralytics.com/tasks/classify)        | ✅        |
+| Task                                          | Supported |
+| :-------------------------------------------- | :-------- |
+| [Object Detection](../tasks/detect.md)        | ✅        |
+| [Instance Segmentation](../tasks/segment.md)  | ✅        |
+| [Semantic Segmentation](../tasks/semantic.md) | ✅        |
+| [Pose Estimation](../tasks/pose.md)           | ✅        |
+| [OBB Detection](../tasks/obb.md)              | ✅        |
+| [Classification](../tasks/classify.md)        | ✅        |
 
 ## Export to QNN: Converting Your YOLO Model
 
