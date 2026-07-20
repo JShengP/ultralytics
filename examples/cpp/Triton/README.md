@@ -2,12 +2,12 @@
 
 <img alt="C++" src="https://img.shields.io/badge/C%2B%2B-17-00599C.svg?logo=cplusplus&logoColor=white"> <img alt="NVIDIA Triton" src="https://img.shields.io/badge/NVIDIA%20Triton-76B900.svg?logo=nvidia&logoColor=white"> <img alt="OpenCV" src="https://img.shields.io/badge/OpenCV-5C3EE8.svg?logo=opencv&logoColor=white"> <img alt="gRPC" src="https://img.shields.io/badge/gRPC-244c5a.svg?logo=google&logoColor=white">
 
-A C++ gRPC client that runs **every [Ultralytics YOLO](https://docs.ultralytics.com/) task and model generation** against a model served by the [NVIDIA Triton Inference Server](https://github.com/triton-inference-server/server). The client reads the input/output layout from the model metadata, infers the task from the output shapes, and shares its post-processing with the other C++ examples — so the same binary handles detection, segmentation, pose, OBB, classification, and YOLO26 semantic segmentation.
+A C++ gRPC client that runs **every [Ultralytics YOLO](https://docs.ultralytics.com/) task and model generation** against a model served by the [NVIDIA Triton Inference Server](https://github.com/triton-inference-server/server). The client reads the input/output layout from the model metadata, infers the task from the output shapes, and shares its post-processing with the other C++ examples — so the same binary handles detection, segmentation, pose, OBB, classification, and Ultralytics YOLO26 semantic segmentation.
 
 ## ✨ Features
 
-- **All tasks:** [detect](https://docs.ultralytics.com/tasks/detect), [segment](https://docs.ultralytics.com/tasks/segment), [pose](https://docs.ultralytics.com/tasks/pose), [OBB](https://docs.ultralytics.com/tasks/obb), [classify](https://docs.ultralytics.com/tasks/classify), and YOLO26 semantic segmentation.
-- **All generations:** [YOLOv8](https://docs.ultralytics.com/models/yolov8), [YOLO11](https://docs.ultralytics.com/models/yolo11), and [YOLO26](https://docs.ultralytics.com/models/yolo26). The grid output of YOLOv8/11 and the end-to-end (NMS-free) output of YOLO26 are detected automatically from the tensor shape.
+- **All tasks:** [detect](https://docs.ultralytics.com/tasks/detect), [segment](https://docs.ultralytics.com/tasks/segment), [pose](https://docs.ultralytics.com/tasks/pose), [OBB](https://docs.ultralytics.com/tasks/obb), [classify](https://docs.ultralytics.com/tasks/classify), and Ultralytics YOLO26 semantic segmentation.
+- **All generations:** [Ultralytics YOLOv8](https://docs.ultralytics.com/models/yolov8), [Ultralytics YOLO11](https://docs.ultralytics.com/models/yolo11), and [Ultralytics YOLO26](https://docs.ultralytics.com/models/yolo26). The grid output of YOLOv8/11 and the end-to-end (NMS-free) output of YOLO26 are detected automatically from the tensor shape.
 - **FP16 and FP32:** the input and output datatypes are read from the model metadata, so half-precision ([FP16](https://www.ultralytics.com/glossary/half-precision)) and full-precision models both work with no flags.
 - **Seamless Triton integration:** communicates with the server over gRPC for efficient, scalable model serving.
 - **Simple CLI:** choose the server URL, model name, source image, and thresholds at runtime — no recompiling.
@@ -40,7 +40,7 @@ yolo export model=yolo26n-sem.pt format=onnx opset=12          # semantic
 yolo export model=yolo11n.pt format=onnx opset=12 dynamic=True # YOLOv8/YOLO11 (grid) work too
 ```
 
-Add `half=True device=0` to export an FP16 model on a GPU; the client reads the input/output datatype from the metadata and handles FP16 or FP32 automatically.
+Add `quantize=16 device=0` to export an FP16 model on a GPU; the client reads the input/output datatype from the metadata and handles FP16 or FP32 automatically.
 
 Place the exported model under `<repository>/<model_name>/1/model.onnx`. Triton's ONNX backend auto-completes the configuration, so a `config.pbtxt` is optional. A minimal repository looks like:
 
@@ -90,7 +90,7 @@ The shared helpers in [`../common`](../common) are header-only and added to the 
 
 ## 🚀 Usage
 
-Start your Triton server with a deployed YOLO model, then run the client. Use the model name as deployed in the repository as `--model`.
+Start your Triton server with a deployed Ultralytics YOLO model, then run the client. Use the model name as deployed in the repository as `--model`.
 
 ```bash
 # Defaults: --url localhost:8001 --model yolo26n --source bus.jpg --conf 0.25 --iou 0.45 --out result.jpg

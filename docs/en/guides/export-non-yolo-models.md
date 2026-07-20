@@ -2,7 +2,7 @@
 title: Export Any PyTorch Model to ONNX & More
 comments: true
 description: Export any PyTorch model (timm, torchvision, or custom) to ONNX, OpenVINO, CoreML, TensorFlow, and more through one Ultralytics API, with no per-backend code.
-keywords: export PyTorch model, convert PyTorch to ONNX, PyTorch to CoreML, PyTorch to OpenVINO, PyTorch to TensorFlow, non-YOLO export, timm export, torchvision export, TorchScript export, NCNN export, MNN export, PaddlePaddle export, ExecuTorch export, TFLite export, Ultralytics export utilities, torch.nn.Module export, model conversion, model deployment, PyTorch deployment
+keywords: export PyTorch model, convert PyTorch to ONNX, PyTorch to CoreML, PyTorch to OpenVINO, PyTorch to TensorFlow, non-YOLO export, timm export, torchvision export, TorchScript export, NCNN export, MNN export, PaddlePaddle export, ExecuTorch export, LiteRT export, Ultralytics export utilities, torch.nn.Module export, model conversion, model deployment, PyTorch deployment
 ---
 
 # How to Export Non-YOLO PyTorch Models with Ultralytics
@@ -110,13 +110,13 @@ ov_model = torch2openvino(model, im, output_dir="resnet18_openvino_model")
 
 The directory contains a fixed-name `model.xml` and `model.bin` pair:
 
-```
+```text
 resnet18_openvino_model/
 ├── model.xml
 └── model.bin
 ```
 
-Pass `dynamic=True` for dynamic input shapes, `half=True` for FP16, or `int8=True` for INT8 quantization. INT8 additionally requires a `calibration_dataset` argument.
+Pass `dynamic=True` for dynamic input shapes, `quantize=16` for FP16, or `quantize=8` for INT8 quantization. INT8 additionally requires a `calibration_dataset` argument.
 
 Requires `openvino>=2024.0.0` (or `>=2025.2.0` on macOS 15.4+) and `torch>=2.1`.
 
@@ -152,7 +152,7 @@ keras_model = onnx2saved_model("resnet18.onnx", output_dir="resnet18_saved_model
 
 The function returns a Keras model and also generates TFLite files (`.tflite`) inside the output directory:
 
-```
+```text
 resnet18_saved_model/
 ├── saved_model.pb
 ├── variables/
@@ -195,7 +195,7 @@ torch2ncnn(model, im, output_dir="resnet18_ncnn_model")
 
 The directory contains fixed-name param and bin files along with a Python wrapper:
 
-```
+```text
 resnet18_ncnn_model/
 ├── model.ncnn.param
 ├── model.ncnn.bin
@@ -215,7 +215,7 @@ torch2onnx(model, im, output_file="resnet18.onnx")
 onnx2mnn("resnet18.onnx", output_file="resnet18.mnn")
 ```
 
-Supports `half=True` for FP16 and `int8=True` for INT8 quantization. Requires `MNN>=2.9.6` and `torch>=1.10`.
+Supports `quantize=16` for FP16 and `quantize=8` for INT8 quantization. Requires `MNN>=2.9.6` and `torch>=1.10`.
 
 ### Export to PaddlePaddle
 
@@ -227,7 +227,7 @@ torch2paddle(model, im, output_dir="resnet18_paddle_model")
 
 The directory contains the PaddlePaddle model and parameter files:
 
-```
+```text
 resnet18_paddle_model/
 ├── model.pdmodel
 └── model.pdiparams
@@ -251,7 +251,7 @@ torch2executorch(model, im, output_dir="resnet18_executorch_model")
 
 The exported `.pte` file is saved inside the output directory:
 
-```
+```text
 resnet18_executorch_model/
 └── model.pte
 ```
@@ -319,7 +319,7 @@ Yes. torchvision classifiers, detectors, and segmentation models export to `.mlp
 
 ### Can I quantize my exported model to INT8 or FP16?
 
-Yes, for several formats. Pass `half=True` for FP16 or `int8=True` for INT8 when exporting to OpenVINO, CoreML, MNN, or NCNN. INT8 in OpenVINO additionally requires a `calibration_dataset` argument for [post-training quantization](https://www.ultralytics.com/glossary/model-quantization). See each format's integration page for quantization trade-offs.
+Yes, for several formats. Pass `quantize=16` for FP16 or `quantize=8` for INT8 when exporting to OpenVINO, CoreML, MNN, or NCNN. INT8 in OpenVINO additionally requires a `calibration_dataset` argument for [post-training quantization](https://www.ultralytics.com/glossary/model-quantization). See each format's integration page for quantization trade-offs.
 
 ### How do I verify an exported model matches the original?
 

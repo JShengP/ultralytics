@@ -1,4 +1,5 @@
 ---
+plans: [free, pro, enterprise]
 title: Dataset Management
 comments: true
 description: Learn how to upload, manage, and organize datasets in Ultralytics Platform for YOLO model training with automatic processing and statistics.
@@ -15,7 +16,7 @@ Ultralytics Platform accepts multiple upload formats for flexibility.
 
 !!! tip "Already have data elsewhere?"
 
-    If you already have datasets in [Ultralytics HUB](../integrations/ultralytics-hub.md) or [Roboflow](../integrations/roboflow.md), use [Integrations](../integrations/index.md) to import them directly — no manual export or re-upload needed.
+    If you already have datasets in [Ultralytics HUB](../integrations/ultralytics-hub.md) or [Roboflow](../integrations/roboflow.md), use [Integrations](../integrations/index.md) to import them directly — no manual export or re-upload needed. Data in [Google Cloud Storage](../integrations/google-cloud-storage.md), [Amazon S3](../integrations/amazon-s3.md), or [Azure Blob Storage](../integrations/azure-blob-storage.md) can be used in place through **Cloud storage**. Enterprise workspaces can use [On Premise](../integrations/on-premise.md) to index and train on local data without sending pixels to Platform.
 
 ### Supported Formats
 
@@ -36,14 +37,13 @@ Ultralytics Platform accepts multiple upload formats for flexibility.
 
 === "Videos"
 
-    Videos are automatically extracted to frames on the client side at 1 FPS (max 100 frames per video).
+    Videos are extracted to frames in your browser at 1 FPS (max 100 frames per video). The container/codec combination must be browser-decodable — see [Browser Codec Support](#browser-codec-support).
 
     | Format | Extensions | Extraction            | Max Size |
     | ------ | ---------- | --------------------- | -------- |
     | MP4    | `.mp4`     | 1 FPS, max 100 frames | 1 GB     |
     | WebM   | `.webm`    | 1 FPS, max 100 frames | 1 GB     |
     | MOV    | `.mov`     | 1 FPS, max 100 frames | 1 GB     |
-    | AVI    | `.avi`     | 1 FPS, max 100 frames | 1 GB     |
     | MKV    | `.mkv`     | 1 FPS, max 100 frames | 1 GB     |
     | M4V    | `.m4v`     | 1 FPS, max 100 frames | 1 GB     |
 
@@ -61,6 +61,32 @@ Ultralytics Platform accepts multiple upload formats for flexibility.
     | TAR    | `.tar` `.tar.gz` `.tgz` | Compressed or raw | 10 GB  | 20 GB  | 50 GB      |
     | NDJSON | `.ndjson`               | Dataset export    | 10 GB  | 20 GB  | 50 GB      |
 
+### Browser Codec Support
+
+The file extension alone isn't enough: a video can still fail if its container or codec isn't supported by your browser.
+
+!!! tip "Use H.264 MP4"
+
+    H.264 video in an MP4 container has the broadest support across major browsers and is the safest choice. If a video won't upload, re-encode it with [FFmpeg](https://ffmpeg.org/):
+
+    ```bash
+    ffmpeg -i input.mov \
+      -c:v libx264 -pix_fmt yuv420p \
+      -c:a aac -movflags +faststart \
+      output.mp4
+    ```
+
+??? info "Which video codecs work"
+
+    These are the codecs **Chromium-based browsers** typically decode. Safari and Firefox may differ, so don't treat the Yes/No values below as universal browser support:
+
+    | Codec                               | Decodes in Chrome | Notes                                |
+    | ----------------------------------- | ----------------- | ------------------------------------ |
+    | H.264 (AVC)                         | Yes               | Recommended — widest browser support |
+    | VP8, VP9, AV1                       | Yes               | Royalty-free; common in WebM and MKV |
+    | HEVC (H.265)                        | Hardware only     | Only on devices with an HEVC decoder |
+    | ProRes, MPEG-2, DivX/Xvid, MJPEG, … | No                | Re-encode to H.264                   |
+
 ### Preparing Your Dataset
 
 The Platform supports [Ultralytics YOLO](../../datasets/detect/index.md#ultralytics-yolo-format), [COCO](https://cocodataset.org/#format-data), [Ultralytics NDJSON](../../datasets/detect/index.md#ultralytics-ndjson-format), and raw (unannotated) uploads:
@@ -69,7 +95,7 @@ The Platform supports [Ultralytics YOLO](../../datasets/detect/index.md#ultralyt
 
     Use the standard YOLO directory structure with a `data.yaml` file:
 
-    ```
+    ```text
     my-dataset/
     ├── images/
     │   ├── train/
@@ -106,7 +132,7 @@ The Platform supports [Ultralytics YOLO](../../datasets/detect/index.md#ultralyt
 
     Use JSON annotation files with the standard [COCO structure](https://cocodataset.org/#format-data):
 
-    ```
+    ```text
     my-coco-dataset/
     ├── train/
     │   ├── _annotations.coco.json
@@ -134,7 +160,7 @@ The Platform supports [Ultralytics YOLO](../../datasets/detect/index.md#ultralyt
 
     Classification uploads are auto-detected from common folder layouts:
 
-    ```
+    ```text
     split/class/image.jpg
     class/split/image.jpg
     class/image.jpg
@@ -142,7 +168,7 @@ The Platform supports [Ultralytics YOLO](../../datasets/detect/index.md#ultralyt
 
     Example:
 
-    ```
+    ```text
     my-classify-dataset/
     ├── train/
     │   ├── cats/
@@ -412,16 +438,17 @@ Automatic statistics computed from your dataset:
 
 View all models trained on this dataset in a searchable table:
 
-| Column   | Description               |
-| -------- | ------------------------- |
-| Name     | Model name with link      |
-| Project  | Parent project with icon  |
-| Status   | Training status badge     |
-| Task     | YOLO task type            |
-| Epochs   | Best epoch / total epochs |
-| mAP50-95 | Mean average precision    |
-| mAP50    | mAP at IoU 0.50           |
-| Created  | Creation date             |
+| Column   | Description                                         |
+| -------- | --------------------------------------------------- |
+| Name     | Model name with link                                |
+| Project  | Parent project with icon                            |
+| Version  | Immutable dataset version used for training, if any |
+| Status   | Training status badge                               |
+| Task     | YOLO task type                                      |
+| Epochs   | Best epoch / total epochs                           |
+| mAP50-95 | Mean average precision                              |
+| mAP50    | mAP at IoU 0.50                                     |
+| Created  | Creation date                                       |
 
 ![Ultralytics Platform Datasets Models Tab Trained Models Table](https://cdn.jsdelivr.net/gh/ultralytics/assets@main/docs/platform/platform-datasets-models-tab-trained-models-table.avif)
 
@@ -469,6 +496,10 @@ To create a version:
 5. Download the version separately from the table when needed
 
 Each version is numbered sequentially (v1, v2, v3...) and stored permanently. You can download any previous version at any time from the versions table.
+
+!!! tip "Save a Version While Training"
+
+    Enable **Save Dataset Version** in the [Cloud Training dialog](../train/cloud-training.md#save-dataset-version-optional) to link a model to the exact dataset used for training. The Platform reuses a matching version when the dataset contents have not changed and creates a new version only when they have.
 
 !!! note "Ready Datasets Only"
 
@@ -578,7 +609,7 @@ Delete multiple images at once:
 
 Reference Platform datasets using the `ul://` URI format (see [Using Platform Datasets](../api/index.md#using-platform-datasets)):
 
-```
+```text
 ul://username/datasets/dataset-slug
 ```
 

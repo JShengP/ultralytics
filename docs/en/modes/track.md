@@ -72,7 +72,7 @@ Run tracking on a video with the default BoT-SORT tracker. Swap to another track
         yolo track model=yolo26n.pt source="https://youtu.be/LNwODJXcvt4" tracker="bytetrack.yaml"
         ```
 
-To run the tracker on video streams, use a trained Detect, Segment, Pose, or OBB model such as YOLO26n, YOLO26n-seg, YOLO26n-pose, or YOLO26n-obb. You can train custom models locally or on cloud GPUs through [Ultralytics Platform](https://platform.ultralytics.com).
+To run the tracker on video streams, use a trained Detect, Segment, Pose, or OBB model such as YOLO26n, YOLO26n-seg, YOLO26n-pose, or YOLO26n-obb. You can train custom models locally or with [Ultralytics Platform cloud training](../platform/train/cloud-training.md).
 
 !!! example
 
@@ -284,7 +284,7 @@ For better performance with a separate classification model, export it to a fast
     model.model.model[-1] = pool
 
     # Export to TensorRT
-    model.export(format="engine", half=True, dynamic=True, batch=32)
+    model.export(format="engine", quantize=16, dynamic=True, batch=32)
     ```
 
 Once exported, point to the TensorRT model path in your tracker config.
@@ -473,6 +473,12 @@ There is no appearance model and no camera-motion compensation.
 
 Here is a Python script using [OpenCV](https://www.ultralytics.com/glossary/opencv) (`cv2`) and YOLO26 to run object tracking on video frames. This script assumes the necessary packages (`opencv-python` and `ultralytics`) are already installed. The `persist=True` argument tells the tracker that the current image or frame is the next in a sequence and to expect tracks from the previous image in the current image.
 
+!!! tip "Persisting tracks and selecting a tracker"
+
+    Use `persist=True` only when passing consecutive frames from the same video stream to `model.track()`. This lets the tracker reuse state from earlier frames and maintain consistent track IDs over time. Do not use `persist=True` across unrelated images or a different stream, since previous track state can carry over.
+
+    You can also choose a tracker backend by passing a tracker configuration file, such as `tracker="botsort.yaml"`, `tracker="bytetrack.yaml"`, or `tracker="tracktrack.yaml"`.
+
 !!! example "Streaming for-loop with tracking"
 
     ```python
@@ -494,7 +500,8 @@ Here is a Python script using [OpenCV](https://www.ultralytics.com/glossary/open
 
         if success:
             # Run YOLO26 tracking on the frame, persisting tracks between frames
-            results = model.track(frame, persist=True)
+            # and using the BoT-SORT tracker backend
+            results = model.track(frame, persist=True, tracker="botsort.yaml")
 
             # Visualize the results on the frame
             annotated_frame = results[0].plot()
@@ -663,6 +670,12 @@ Together, let's enhance the tracking capabilities of the Ultralytics YOLO ecosys
 ### What is Multi-Object Tracking and how does Ultralytics YOLO support it?
 
 Multi-object tracking in video analytics involves both identifying objects and maintaining a unique ID for each detected object across video frames. Ultralytics YOLO supports this by providing real-time tracking along with object IDs, facilitating tasks such as security surveillance and sports analytics. The system uses trackers such as [BoT-SORT](https://github.com/NirAharon/BoT-SORT), [ByteTrack](https://github.com/FoundationVision/ByteTrack), OC-SORT, Deep OC-SORT, FastTracker, and TrackTrack, which can be configured via YAML files.
+
+### Can I store the tracker inside a YOLO model file?
+
+No. Standard Ultralytics `.pt` files store the YOLO model weights, while the tracker is created at inference time by [`model.track()`](../reference/engine/model.md#ultralytics.engine.model.Model.track). Track IDs depend on tracker state across consecutive frames, so a single standalone image can return detections such as boxes, classes, and confidences, but it cannot produce meaningful persistent tracking IDs by itself.
+
+For deployment, package the detector and tracker together in your application and call `model.track()` frame by frame with `persist=True` when frames come from the same video stream. Use separate model or tracker instances for unrelated streams so state does not carry over between videos.
 
 ### How do I configure a custom tracker for Ultralytics YOLO?
 

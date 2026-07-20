@@ -321,7 +321,7 @@ For production deployment, combine DALI preprocessing with [TensorRT](../integra
 
 ### Model Repository Structure
 
-```
+```text
 model_repository/
 ├── dali_preprocessing/
 │   ├── 1/
@@ -392,7 +392,7 @@ Serialize the DALI pipeline for the Triton DALI backend:
     from ultralytics import YOLO
 
     model = YOLO("yolo26n.pt")
-    model.export(format="engine", imgsz=640, half=True, batch=8)
+    model.export(format="engine", imgsz=640, quantize=16, batch=8)
     # Copy the .engine file to model_repository/yolo_trt/1/model.plan
     ```
 

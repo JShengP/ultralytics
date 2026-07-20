@@ -22,6 +22,10 @@ This toolkit optimizes deep learning models for NVIDIA GPUs and results in faste
 
 TensorRT is known for its compatibility with various model formats, including TensorFlow, [PyTorch](https://www.ultralytics.com/glossary/pytorch), and ONNX, providing developers with a flexible solution for integrating and optimizing models from different frameworks. This versatility enables efficient [model deployment](https://www.ultralytics.com/glossary/model-deployment) across diverse hardware and software environments.
 
+!!! warning "TensorRT engines are hardware- and runtime-specific"
+
+    TensorRT profiles and tunes an engine on its build GPU. Build for the deployment GPU architecture and match the TensorRT/CUDA runtime; do not treat an `.engine` file as a portable model format. For edge deployment, [Ultralytics Platform](../platform/train/models.md#nvidia-jetson-tensorrt-targets) offers eight Jetson target selections, with physical build and validation status documented for each, or you can export locally on the destination device.
+
 ## Key Features of TensorRT Models
 
 TensorRT models offer a range of key features that contribute to their efficiency and effectiveness in high-speed deep learning inference:
@@ -148,8 +152,7 @@ The TensorRT format supports the [Export](../modes/export.md), [Predict](../mode
 | ----------- | ----------------- | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `format`    | `str`             | `'engine'`     | Target format for the exported model, defining compatibility with various deployment environments.                                                                                                                                                               |
 | `imgsz`     | `int` or `tuple`  | `640`          | Desired image size for the model input. Can be an integer for square images or a tuple `(height, width)` for specific dimensions.                                                                                                                                |
-| `half`      | `bool`            | `False`        | Enables FP16 (half-precision) quantization, reducing model size and potentially speeding up inference on supported hardware.                                                                                                                                     |
-| `int8`      | `bool`            | `False`        | Activates INT8 quantization, further compressing the model and speeding up inference with minimal [accuracy](https://www.ultralytics.com/glossary/accuracy) loss, primarily for edge devices.                                                                    |
+| `quantize`  | `int` or `str`    | `None`         | Quantization precision: `16` (FP16) or `8` (INT8/PTQ; needs calibration `data`/`fraction`); `32`/unset is FP32. Replaces the deprecated `half`/`int8` flags.                                                                                                     |
 | `dynamic`   | `bool`            | `False`        | Allows dynamic input sizes, enhancing flexibility in handling varying image dimensions.                                                                                                                                                                          |
 | `simplify`  | `bool`            | `True`         | Simplifies the model graph with `onnxslim`, potentially improving performance and compatibility.                                                                                                                                                                 |
 | `workspace` | `float` or `None` | `None`         | Sets the maximum workspace size in GiB for TensorRT optimizations, balancing memory usage and performance; use `None` for auto-allocation by TensorRT up to device maximum.                                                                                      |
@@ -175,7 +178,7 @@ Exporting Ultralytics YOLO models using TensorRT with INT8 [precision](https://w
 
 !!! note "TensorRT 11 quantization"
 
-    TensorRT 11 removed implicit quantization and the `IInt8Calibrator` interface. On TensorRT 11 and newer, Ultralytics performs INT8 quantization with [NVIDIA ModelOpt](https://github.com/NVIDIA/Model-Optimizer) explicit quantization, which inserts Q/DQ nodes into the ONNX graph before building a strongly-typed engine, and FP16 is applied with ModelOpt AutoCast mixed-precision conversion. The `int8=True`, `half=True`, and `data` arguments work the same way; ModelOpt is installed automatically on first use. On TensorRT 7-10 the legacy calibrator described below is used instead.
+    TensorRT 11 removed implicit quantization and the `IInt8Calibrator` interface. On TensorRT 11 and newer, Ultralytics performs INT8 quantization with [NVIDIA ModelOpt](https://github.com/NVIDIA/Model-Optimizer) explicit quantization, which inserts Q/DQ nodes into the ONNX graph before building a strongly-typed engine, and FP16 is applied with ModelOpt AutoCast mixed-precision conversion. The `quantize=8`, `quantize=16`, and `data` arguments work the same way; ModelOpt is installed automatically on first use. On TensorRT 7-10 the legacy calibrator described below is used instead.
 
 When processing implicitly quantized networks TensorRT uses INT8 opportunistically to optimize layer execution time. If a layer runs faster in INT8 and has assigned quantization scales on its data inputs and outputs, then a kernel with INT8 precision is assigned to that layer, otherwise TensorRT selects a precision of either FP32 or FP16 for the kernel based on whichever results in faster execution time for that layer.
 
@@ -204,7 +207,7 @@ The arguments provided when using [export](../modes/export.md) for an Ultralytic
 
     Using small batches can lead to inaccurate scaling during INT8 calibration. This is because the process adjusts based on the data it sees. Small batches might not capture the full range of values, leading to issues with the final calibration. Using a larger [batch size](https://www.ultralytics.com/glossary/batch-size) helps ensure more representative calibration results.
 
-Experimentation by NVIDIA led them to recommend using at least 500 calibration images that are representative of the data for your model, with INT8 quantization calibration. This is a guideline and not a _hard_ requirement, and <u>**you will need to experiment with what is required to perform well for your dataset**.</u> Since the calibration data is required for INT8 calibration with TensorRT, make certain to use the `data` argument when `int8=True` for TensorRT and use `data="my_dataset.yaml"`, which will use the images from [validation](../modes/val.md) to calibrate with. When no value is passed for `data` with export to TensorRT with INT8 quantization, the default will be to use one of the ["small" example datasets based on the model task](../datasets/index.md) instead of throwing an error.
+Experimentation by NVIDIA led them to recommend using at least 500 calibration images that are representative of the data for your model, with INT8 quantization calibration. This is a guideline and not a _hard_ requirement, and <u>**you will need to experiment with what is required to perform well for your dataset**.</u> Since the calibration data is required for INT8 calibration with TensorRT, make certain to use the `data` argument when `quantize=8` for TensorRT and use `data="my_dataset.yaml"`, which will use the images from [validation](../modes/val.md) to calibrate with. When no value is passed for `data` with export to TensorRT with INT8 quantization, the default will be to use one of the ["small" example datasets based on the model task](../datasets/index.md) instead of throwing an error.
 
 !!! example
 
@@ -219,7 +222,7 @@ Experimentation by NVIDIA led them to recommend using at least 500 calibration i
             dynamic=True,  # (1)!
             batch=8,  # (2)!
             workspace=4,  # (3)!
-            int8=True,
+            quantize=8,
             data="coco.yaml",  # (4)!
         )
 
@@ -230,7 +233,7 @@ Experimentation by NVIDIA led them to recommend using at least 500 calibration i
         result = model.predict("https://ultralytics.com/images/bus.jpg")
         ```
 
-        1. Exports with dynamic axes, this will be enabled by default when exporting with `int8=True` even when not explicitly set. See [export arguments](../modes/export.md#arguments) for additional information.
+        1. Exports with dynamic axes, this will be enabled by default when exporting with `quantize=8` even when not explicitly set. See [export arguments](../modes/export.md#arguments) for additional information.
         2. Sets max batch size of 8 for exported model and INT8 calibration.
         3. Allocates 4 GiB of memory instead of allocating the entire device for conversion process.
         4. Uses [COCO dataset](../datasets/detect/coco.md) for calibration, specifically the images used for [validation](../modes/val.md) (5,000 total).
@@ -240,7 +243,7 @@ Experimentation by NVIDIA led them to recommend using at least 500 calibration i
 
         ```bash
         # Export a YOLO26n PyTorch model to TensorRT format with INT8 quantization
-        yolo export model=yolo26n.pt format=engine batch=8 workspace=4 int8=True data=coco.yaml # creates 'yolo26n.engine'
+        yolo export model=yolo26n.pt format=engine batch=8 workspace=4 quantize=8 data=coco.yaml # creates 'yolo26n.engine'
 
         # Run inference with the exported TensorRT quantized model
         yolo predict model=yolo26n.engine source='https://ultralytics.com/images/bus.jpg'
@@ -264,7 +267,7 @@ Experimentation by NVIDIA led them to recommend using at least 500 calibration i
 
 #### Drawbacks of using YOLO with TensorRT INT8
 
-- **Decreases in evaluation metrics:** Using a lower precision will mean that `mAP`, `Precision`, `Recall` or any [other metric used to evaluate model performance](../guides/yolo-performance-metrics.md) is likely to be somewhat worse. See the [Performance results section](#ultralytics-yolo-tensorrt-export-performance) to compare the differences in `mAP50` and `mAP50-95` when exporting with INT8 on small sample of various devices.
+- **Decreases in evaluation metrics:** Using a lower precision will mean that `mAP`, `Precision`, `Recall` or any [other metric used to evaluate model performance](../guides/yolo-performance-metrics.md) is likely to be somewhat worse. Sigmoid layers are kept at higher precision to preserve score calibration, but INT8 can still shift confidence values, so select the operating threshold from the INT8 model's own F1 curve. See the [Performance results section](#ultralytics-yolo-tensorrt-export-performance) to compare the differences in `mAP50` and `mAP50-95` when exporting with INT8 on small sample of various devices.
 
 - **Increased development times:** Finding the "optimal" settings for INT8 calibration for dataset and device can take a significant amount of testing.
 
@@ -465,11 +468,11 @@ Expand sections below for information on how these models were exported and test
     out = model.export(format="engine", imgsz=640, dynamic=True, verbose=False, batch=8, workspace=2)
 
     # TensorRT FP16
-    out = model.export(format="engine", imgsz=640, dynamic=True, verbose=False, batch=8, workspace=2, half=True)
+    out = model.export(format="engine", imgsz=640, dynamic=True, verbose=False, batch=8, workspace=2, quantize=16)
 
     # TensorRT INT8 with calibration `data` (i.e. COCO, ImageNet, or DOTAv1 for appropriate model task)
     out = model.export(
-        format="engine", imgsz=640, dynamic=True, verbose=False, batch=8, workspace=2, int8=True, data="coco8.yaml"
+        format="engine", imgsz=640, dynamic=True, verbose=False, batch=8, workspace=2, quantize=8, data="coco8.yaml"
     )
     ```
 
@@ -578,7 +581,7 @@ Yes, you can export YOLO26 models using TensorRT with INT8 quantization. This pr
     from ultralytics import YOLO
 
     model = YOLO("yolo26n.pt")
-    model.export(format="engine", batch=8, workspace=4, int8=True, data="coco.yaml")
+    model.export(format="engine", batch=8, workspace=4, quantize=8, data="coco.yaml")
     ```
 
 2. **Run inference**:

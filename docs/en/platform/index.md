@@ -1,4 +1,5 @@
 ---
+plans: [free, pro, enterprise]
 comments: true
 description: Ultralytics Platform is an end-to-end computer vision platform for data preparation, model training, and deployment with multi-region infrastructure.
 keywords: Ultralytics Platform, YOLO, computer vision, model training, cloud deployment, annotation, inference, YOLO11, YOLO26, machine learning
@@ -52,16 +53,16 @@ graph LR
 | **Upload**   | Images (50MB), videos (1GB), and dataset files (ZIP, TAR including `.tar.gz`/`.tgz`, NDJSON) with automatic processing                                                                                                 |
 | **Annotate** | Manual tools for all 6 task types, plus [Smart Annotation](data/annotation.md#smart-annotation) with SAM and YOLO models for detect, segment, semantic, and OBB (see [supported tasks](data/index.md#supported-tasks)) |
 | **Train**    | Cloud GPUs (24 on all plans + 2 Pro/Enterprise-only: B200, B300), real-time metrics, project organization                                                                                                              |
-| **Export**   | [19+ deployment formats](../modes/export.md) (ONNX, TensorRT, CoreML, TFLite, etc.; see [supported formats](train/models.md#supported-formats))                                                                        |
-| **Deploy**   | 43 global regions with dedicated endpoints, scale-to-zero by default (single active instance), and monitoring                                                                                                          |
+| **Export**   | [19+ deployment formats](../modes/export.md) (ONNX, TensorRT, CoreML, LiteRT, etc.; see [supported formats](train/models.md#supported-formats))                                                                        |
+| **Deploy**   | 42 global regions with dedicated endpoints, scale-to-zero by default (single active instance), and monitoring                                                                                                          |
 
 **What you can do:**
 
 - **Upload** images, videos, and dataset files to create training datasets
 - **Visualize** annotations with interactive overlays for all 6 YOLO task types (see [supported tasks](data/index.md#supported-tasks))
 - **Train** models on cloud GPUs (24 on all plans, 26 with Pro or Enterprise for B200 and B300) with real-time metrics
-- **Export** to [19+ deployment formats](../modes/export.md) (ONNX, TensorRT, CoreML, TFLite, etc.)
-- **Deploy** to 43 global regions with one-click dedicated endpoints
+- **Export** to [19+ deployment formats](../modes/export.md) (ONNX, TensorRT, CoreML, LiteRT, etc.)
+- **Deploy** to 42 global regions with one-click dedicated endpoints
 - **Monitor** training progress, deployment health, and usage metrics
 - **Collaborate** by making projects and datasets public for the community
 
@@ -79,7 +80,7 @@ You select your region during onboarding, and all your data, models, and deploym
 
 !!! warning "Region is Permanent"
 
-    Your data region cannot be changed after account creation. During onboarding, the platform measures latency to each region and recommends the closest one. Choose carefully.
+    Your data region cannot be changed after account creation. During onboarding, the platform measures latency to each region and recommends the closest one. Choose carefully. Note: this applies to your dataset and model content. Account-level data (profile, billing, activity logs) is processed globally, as described in our [Privacy Policy](https://www.ultralytics.com/legal/privacy) and [Data Processing Agreement](https://www.ultralytics.com/legal/ultralytics-data-processing-agreement#exhibit-a-details-of-personal-data-processing).
 
 ## Key Features
 
@@ -119,7 +120,7 @@ graph LR
 - **Cloud Training**: Train on cloud GPUs (24 on all plans, 26 with [Pro or Enterprise](account/billing.md#plans) for B200 and B300) with real-time metrics
 - **Remote Training**: Train anywhere and stream metrics to the platform (W&B-style)
 - **Project Organization**: Group related models, compare experiments, track activity
-- **19+ Export Formats**: ONNX, TensorRT, CoreML, TFLite, and more (see [supported formats](train/models.md#supported-formats))
+- **19+ Export Formats**: ONNX, TensorRT, CoreML, LiteRT, and more (see [supported formats](train/models.md#supported-formats))
 
 ![Ultralytics Platform Project Screenshot](https://cdn.jsdelivr.net/gh/ultralytics/assets@main/docs/platform/project-screenshot.avif)
 
@@ -167,7 +168,7 @@ You can train models either through the web UI (cloud training) or from your own
 ### Deployment
 
 - **Inference Testing**: Test models directly in the browser with custom images
-- **Dedicated Endpoints**: Deploy to 43 global regions with scale-to-zero by default (single active instance)
+- **Dedicated Endpoints**: Deploy to 42 global regions with scale-to-zero by default (single active instance)
 - **Monitoring**: Real-time metrics, request logs, and performance dashboards
 
 ```mermaid
@@ -176,8 +177,8 @@ graph LR
     B --> C[Browser Predict]:::proc
     B --> D[Export Format]:::proc
     B --> E[Deploy Endpoint]:::proc
-    D --> F[ONNX / TensorRT / CoreML / TFLite / ...]:::out
-    E --> G[43 Global Regions]:::proc
+    D --> F[ONNX / TensorRT / CoreML / LiteRT / ...]:::out
+    E --> G[42 Global Regions]:::proc
     G --> H[API Endpoint URL]:::proc
     H --> I[Monitor & Scale]:::out
 
@@ -292,7 +293,7 @@ For a detailed guide, see the [Quickstart](quickstart.md) page.
 - **Multi-Region**: Data residency in US, EU, or AP regions
 - **No-Code Training**: Train advanced YOLO models without writing code
 - **Real-Time Metrics**: Stream training progress and monitor deployments
-- **43 Deploy Regions**: Deploy models close to your users worldwide
+- **42 Deploy Regions**: Deploy models close to your users worldwide
 - **6 Task Types**: Support for detection, instance segmentation, semantic segmentation, pose, OBB, and classification (see [task docs](../tasks/index.md))
 - **AI-Assisted Annotation**: [Smart annotation](data/annotation.md#smart-annotation) with SAM and YOLO models to speed up data preparation
 
@@ -388,13 +389,12 @@ The Platform supports 19+ deployment formats:
 | OpenVINO      | `_openvino_model`   | Intel hardware            |
 | TensorRT      | `.engine`           | NVIDIA GPU inference      |
 | CoreML        | `.mlpackage`        | Apple devices             |
-| TFLite        | `.tflite`           | Mobile/edge devices       |
 | TF SavedModel | `_saved_model`      | TensorFlow ecosystem      |
 | TF GraphDef   | `.pb`               | TensorFlow legacy         |
 | PaddlePaddle  | `_paddle_model`     | Baidu ecosystem           |
 | NCNN          | `_ncnn_model`       | Mobile (Android/ARM)      |
+| LiteRT        | `.tflite`           | Mobile/edge and browser   |
 | Edge TPU      | `_edgetpu.tflite`   | Google Coral devices      |
-| TF.js         | `_web_model`        | Browser deployment        |
 | MNN           | `.mnn`              | Alibaba mobile            |
 | RKNN          | `_rknn_model`       | Rockchip NPU              |
 | Qualcomm      | `_qnn.onnx`         | Qualcomm Snapdragon NPU   |
