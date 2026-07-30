@@ -6,7 +6,6 @@ import re
 import socket
 import sys
 from concurrent.futures import ThreadPoolExecutor
-from heapq import nlargest
 from math import isfinite
 from pathlib import Path
 from time import sleep, time
@@ -23,6 +22,7 @@ from ultralytics.utils import (
     Retry,
     colorstr,
 )
+from ultralytics.utils.events import events
 
 PREFIX = colorstr("Platform: ")
 PLATFORM_API_URL = os.getenv("PLATFORM_API_URL", f"{PLATFORM_URL}/api/webhooks")
@@ -172,6 +172,25 @@ def _interp_plot(plot, n=101):
         result["ap"] = plot["ap"]  # Keep AP values as-is (per-class scalars)
 
     return result
+
+
+def _validation_payload(image_metrics, sample_limit=5_000, extremes_limit=100):
+    """Return exact F1 extremes and an evenly ranked sample for correlation analysis."""
+    ranked = sorted(image_metrics.items(), key=lambda item: (item[1]["f1"], item[0]))
+    if len(ranked) > sample_limit:
+        sample = [ranked[round(i * (len(ranked) - 1) / (sample_limit - 1))] for i in range(sample_limit)]
+    else:
+        sample = ranked
+
+    def rows(items):
+        return [[Path(name).stem.split("_", 1)[0], metric["tp"], metric["fp"], metric["fn"]] for name, metric in items]
+
+    return {
+        "population": len(ranked),
+        "sampling": "f1_rank",
+        "rows": rows(sample),
+        "extremes": {"worst": rows(ranked[:extremes_limit]), "best": rows(reversed(ranked[-extremes_limit:]))},
+    }
 
 
 def _sanitize_json_value(value):
@@ -383,9 +402,11 @@ def on_pretrain_routine_start(trainer):
             ctx["model_id"],
         )
 
-    # Start console capture with batching (5 lines or 5 seconds)
+    # Console capture with batching (5 lines or 5 seconds). Built here, but not started until Platform
+    # has accepted the run below: capturing first left the user's stdout redirected through a dead
+    # integration whenever training_started failed, and its final flush would post a console chunk
+    # carrying no model_id.
     ctx["console_logger"] = ConsoleLogger(batch_size=5, flush_interval=5.0, on_flush=send_console_output)
-    ctx["console_logger"].start_capture()
 
     # Collect environment info (W&B-style metadata)
     environment = _get_environment_info()
@@ -415,6 +436,7 @@ def on_pretrain_routine_start(trainer):
             ctx["model_slug"] = response["modelSlug"]
             url = f"{PLATFORM_URL}/{project}/{ctx['model_slug']}"
             LOGGER.info(f"{PREFIX}View model at {url}")
+        ctx["console_logger"].start_capture()  # only now: the run is tracked and model_id is known
         # Note: trainer.stop is set in on_pretrain_routine_end (after _setup_train resets it)
         _handle_control_response(trainer, ctx, response)
     else:
@@ -505,8 +527,9 @@ def on_model_save(trainer):
 
 
 def on_train_end(trainer):
-    """Log final results, upload best model, and send validation plot data."""
-    ctx = getattr(trainer, "platform", None)
+    """Run events on train end once fitness and duration are known, then log final results and upload best model."""
+    events(trainer.args, trainer.device, trainer)
+    ctx = getattr(trainer, "platform", None)  # set only by on_pretrain_routine_start, so unset without an API key
     if not ctx or RANK not in {-1, 0} or not trainer.args.project:
         return
 
@@ -555,18 +578,7 @@ def on_train_end(trainer):
     best_epoch = max(0, getattr(getattr(trainer, "stopper", None), "best_epoch", trainer.epoch + 1) - 1)
 
     image_metrics = trainer.validator.metrics.box.image_metrics if trainer.args.task == "detect" else {}
-    cohort = min(25_000, (len(image_metrics) + 1) // 2)
-    worst = nlargest(cohort, image_metrics.items(), key=lambda item: (-item[1]["f1"], item[1]["fp"] + item[1]["fn"]))
-    worst_names = {name for name, _ in worst}
-    best = nlargest(
-        cohort,
-        ((name, metric) for name, metric in image_metrics.items() if name not in worst_names),
-        key=lambda item: (item[1]["f1"], item[1]["tp"]),
-    )
-    rows = [
-        [Path(name).stem.split("_", 1)[0], metric["tp"], metric["fp"], metric["fn"]] for name, metric in worst + best
-    ]
-    validation = {"population": len(image_metrics), "rows": rows}
+    validation = _validation_payload(image_metrics)
     _send(
         "training_complete",
         {
@@ -574,7 +586,8 @@ def on_train_end(trainer):
                 "metrics": {**trainer.metrics, "fitness": trainer.fitness},
                 "bestEpoch": best_epoch,
                 "bestFitness": trainer.best_fitness,
-                **({"validation": validation} if rows else {}),
+                **({"calibration": c} if (c := getattr(trainer, "depth_calibration", None)) else {}),
+                **({"validation": validation} if validation["rows"] else {}),
                 **(artifact or {}),
             },
             "classNames": class_names,
@@ -590,14 +603,40 @@ def on_train_end(trainer):
     LOGGER.info(f"{PREFIX}View results at {url}")
 
 
-callbacks = (
-    {
-        "on_pretrain_routine_start": on_pretrain_routine_start,
-        "on_pretrain_routine_end": on_pretrain_routine_end,
-        "on_fit_epoch_end": on_fit_epoch_end,
-        "on_model_save": on_model_save,
-        "on_train_end": on_train_end,
-    }
-    if _api_key
-    else {}
-)
+def on_val_start(validator):
+    """Run events on validation start, when the user asked for validation.
+
+    A trainer runs its own final validation on a copy of the trainer's args, whose mode is still 'train'. Since an event
+    is named for its mode, firing here would send a second 'train' event indistinguishable from the training one.
+    """
+    if validator.args.mode == "val":
+        events(validator.args, validator.device)
+
+
+def on_predict_end(predictor):
+    """Run events on predict end, once per-image speeds are known."""
+    events(predictor.args, predictor.device, predictor)
+
+
+def on_export_start(exporter):
+    """Run events on export start."""
+    events(exporter.args, exporter.device)
+
+
+callbacks = {
+    # Anonymous analytics, gated only by the documented sync setting inside Events
+    "on_val_start": on_val_start,
+    "on_predict_end": on_predict_end,
+    "on_export_start": on_export_start,
+    "on_train_end": on_train_end,  # sends the train event, then uploads results if a Platform run is in flight
+    **(
+        {
+            "on_pretrain_routine_start": on_pretrain_routine_start,
+            "on_pretrain_routine_end": on_pretrain_routine_end,
+            "on_fit_epoch_end": on_fit_epoch_end,
+            "on_model_save": on_model_save,
+        }
+        if _api_key
+        else {}
+    ),
+}

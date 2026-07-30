@@ -67,7 +67,7 @@ def test_export_onnx(end2end, isolated_model):
 @pytest.mark.parametrize("precision", [{"int8": True}, {"quantize": 8}])
 def test_export_onnx_int8(isolated_model, precision):
     """Test INT8 ONNX export via both the legacy int8 alias and the unified quantize arg."""
-    file = YOLO(isolated_model).export(format="onnx", data="coco8.yaml", fraction=0.25, imgsz=32, **precision)
+    file = YOLO(isolated_model).export(format="onnx", data=Path("coco8.yaml"), fraction=0.25, imgsz=32, **precision)
     assert Path(file).name.endswith("_int8.onnx")
     YOLO(file)(SOURCE, imgsz=32)  # exported model inference
     Path(file).unlink()  # cleanup
@@ -185,6 +185,16 @@ def test_int8_calibration_validates_split():
     exporter.imgsz = [32]
     with pytest.raises(FileNotFoundError, match="trainval"):
         exporter.get_int8_calibration_dataloader()
+
+
+def test_int8_calibration_classify_fraction():
+    """Check classification INT8 calibration respects fraction (#25469)."""
+    exporter = object.__new__(Exporter)
+    exporter.model = SimpleNamespace(task="classify")
+    exporter.args = get_cfg(overrides={"data": "imagenet10", "fraction": 0.5, "batch": 1})
+    exporter.imgsz = [32]
+    dataloader = exporter.get_int8_calibration_dataloader()
+    assert len(dataloader.dataset) == 6  # imagenet10 val has 12 images, fraction=0.5 keeps 6
 
 
 def test_export_rknn_batch_expansion(monkeypatch, tmp_path):

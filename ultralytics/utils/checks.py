@@ -63,7 +63,7 @@ def normalize_platform_uri(uri):
     """Rewrite an Ultralytics Platform web URL to its ul:// URI so it can be loaded directly as data or model.
 
     Args:
-        uri (str | Path): Resource identifier, e.g. "https://platform.ultralytics.com/user/datasets/slug".
+        uri (str | Path): Resource identifier, e.g. an Ultralytics Platform web URL ending in "/user/datasets/slug".
 
     Returns:
         (str | Path): "ul://user/datasets/slug" for Platform web URLs, otherwise the input unchanged.
@@ -208,7 +208,7 @@ def check_imgsz(imgsz, stride=32, min_dim=1, max_dim=2, floor=0):
 def check_uv():
     """Check if uv package manager is installed and can run successfully."""
     try:
-        return subprocess.run(["uv", "-V"], capture_output=True).returncode == 0
+        return subprocess.run(["uv", "-V"], capture_output=True, check=False).returncode == 0
     except FileNotFoundError:
         return False
 
@@ -260,7 +260,7 @@ def check_version(
                 r"v\d+(\.\d+)*([-_.]?(a|b|c|rc|alpha|beta|pre|preview)[-_.]?\d*)?"
                 r"([-_.]?(post|rev|r)[-_.]?\d*)?([-_.]?dev[-_.]?\d*)?(\+[\w.-]+)?",
                 current,
-                re.I,
+                re.IGNORECASE,
             ):
                 pass
             elif hard:
@@ -287,17 +287,14 @@ def check_version(
         v = parse_version(version)  # '1.2.3' -> (1, 2, 3)
         n = max(len(c), len(v))  # pad to equal length so 4-segment pins like '!=4.13.0.90' compare exactly
         cn, vn = c + (0,) * (n - len(c)), v + (0,) * (n - len(v))
-        if op == "==" and cn != vn:
-            result = False
-        elif op == "!=" and cn == vn:
-            result = False
-        elif op == ">=" and not (cn >= vn):
-            result = False
-        elif op == "<=" and not (cn <= vn):
-            result = False
-        elif op == ">" and not (cn > vn):
-            result = False
-        elif op == "<" and not (cn < vn):
+        if (
+            (op == "==" and cn != vn)
+            or (op == "!=" and cn == vn)
+            or (op == ">=" and not (cn >= vn))
+            or (op == "<=" and not (cn <= vn))
+            or (op == ">" and not (cn > vn))
+            or (op == "<" and not (cn < vn))
+        ):
             result = False
     if not result:
         warning = f"{name}{required} is required, but {name}=={current} is currently installed {msg}"
@@ -900,8 +897,8 @@ def check_amp(model):
     device = next(model.parameters()).device  # get model device
     prefix = colorstr("AMP: ")
     if device.type in {"cpu", "mps"}:
-        return False  # AMP only used on CUDA devices
-    else:
+        return False  # AMP only used on accelerator devices
+    elif device.type == "cuda":
         # GPUs that have issues with AMP
         pattern = re.compile(
             r"(nvidia|geforce|quadro|tesla).*?(1660|1650|1630|t400|t550|t600|t1000|t1200|t2000|k40m)", re.IGNORECASE
@@ -920,7 +917,7 @@ def check_amp(model):
         batch = [im] * 8
         imgsz = max(256, int(model.stride.max() * 4))  # max stride P5-32 and P6-64
         a = m(batch, imgsz=imgsz, device=device, verbose=False)[0].boxes.data  # FP32 inference
-        with autocast(enabled=True):
+        with autocast(enabled=True, device=device.type):
             b = m(batch, imgsz=imgsz, device=device, verbose=False)[0].boxes.data  # AMP inference
         del m
         return a.shape == b.shape and torch.allclose(a, b.float(), atol=0.5)  # close to 0.5 absolute tolerance
@@ -954,7 +951,9 @@ def check_multiple_install():
     import sys
 
     try:
-        result = subprocess.run([sys.executable, "-m", "pip", "show", "ultralytics"], capture_output=True, text=True)
+        result = subprocess.run(
+            [sys.executable, "-m", "pip", "show", "ultralytics"], capture_output=True, text=True, check=False
+        )
         install_msg = (
             f"Install your local copy in editable mode with 'pip install -e {ROOT.parent}' to avoid "
             "issues. See https://docs.ultralytics.com/quickstart/"
@@ -963,7 +962,9 @@ def check_multiple_install():
             if "not found" in result.stderr.lower():  # Package not pip-installed but locally imported
                 LOGGER.warning(f"Ultralytics not found via pip but importing from: {ROOT}. {install_msg}")
             return
-        yolo_path = (Path(re.findall(r"location:\s+(.+)", result.stdout, flags=re.I)[-1]) / "ultralytics").resolve()
+        yolo_path = (
+            Path(re.findall(r"location:\s+(.+)", result.stdout, flags=re.IGNORECASE)[-1]) / "ultralytics"
+        ).resolve()
         if not yolo_path.samefile(ROOT.resolve()):
             LOGGER.warning(
                 f"Multiple Ultralytics installations detected. The `yolo` command uses: {yolo_path}, "
@@ -1066,7 +1067,7 @@ def is_intel():
 
     # Check GPU via xpu-smi
     try:
-        result = subprocess.run(["xpu-smi", "discovery"], capture_output=True, text=True, timeout=5)
+        result = subprocess.run(["xpu-smi", "discovery"], capture_output=True, text=True, timeout=5, check=False)
         return "intel" in result.stdout.lower()
     except Exception:  # broad clause to capture all Intel GPU exception types
         return False
@@ -1081,7 +1082,10 @@ def is_sudo_available() -> bool:
     if WINDOWS:
         return False
     cmd = "sudo --version"
-    return subprocess.run(cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0
+    return (
+        subprocess.run(cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False).returncode
+        == 0
+    )
 
 
 # Run checks and define constants
