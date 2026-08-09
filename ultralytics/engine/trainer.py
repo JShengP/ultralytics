@@ -128,7 +128,6 @@ class BaseTrainer:
             overrides (dict, optional): Configuration overrides.
             _callbacks (dict, optional): Dictionary of callback functions.
         """
-        self.hub_session = overrides.pop("session", None)  # HUB
         self.args = get_cfg(cfg, overrides)
         self.check_resume(overrides)
         self.args.device = parse_device(self.args.device)  # canonical string, resolves '-1' auto-selection once
@@ -1157,16 +1156,17 @@ class BaseTrainer:
         if use_muon:
             num_params[0] = len(g[3])  # update number of params
             g[3] = {"params": g[3], **optim_args, "weight_decay": decay, "use_muon": True, "param_group": "muon"}
-            import re
-
             # higher lr for certain parameters in MuSGD when finetuning
-            # proto.semseg is the checkpoint parameter name for YOLO26 semantic auxiliary heads.
-            pattern = re.compile(r"(?=.*23)(?=.*cv3)|proto\.semseg|SemanticSegment")
+            target = unwrap_model(model)
+            head = getattr(target, "student_model", target).model[-1]
+            heads = (getattr(head, "cv3", None), getattr(head, "one2one_cv3", None))
+            boosted = {id(p) for m in heads if m for p in m.parameters()}
             g_ = []  # new param groups
             for x in g:
                 p = x.pop("params")
-                p1 = [v for k, v in p.items() if pattern.search(k)]
-                p2 = [v for k, v in p.items() if not pattern.search(k)]
+                p1, p2 = [], []
+                for k, v in p.items():
+                    (p1 if id(v) in boosted or "proto.semseg" in k or "SemanticSegment" in k else p2).append(v)
                 g_.extend([{"params": p1, **x, "lr": lr * 3}, {"params": p2, **x}])
             g = g_
         optimizer = (partial(MuSGD, muon=muon, sgd=sgd) if use_muon else getattr(optim, name))(params=g)
@@ -1257,7 +1257,6 @@ class MultiTrainer:
                         "project": str(self.save_dir),  # nest per-dataset runs inside the sweep directory
                         "name": name,
                         "resume": False,
-                        "session": None,
                     }
                     run = SimpleNamespace(
                         project=overrides["project"],
@@ -1278,7 +1277,7 @@ class MultiTrainer:
                             [
                                 *_YOLO_CLI_COMMAND,
                                 "train",
-                                *(f"{k}={v}" for k, v in overrides.items() if k != "session"),
+                                *(f"{k}={v}" for k, v in overrides.items()),
                             ],
                             check=True,
                         )
