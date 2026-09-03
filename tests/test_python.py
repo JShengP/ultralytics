@@ -43,7 +43,7 @@ from ultralytics.utils import (
     is_github_action_running,
 )
 from ultralytics.utils.downloads import download, safe_download
-from ultralytics.utils.torch_utils import TORCH_1_11, TORCH_1_13
+from ultralytics.utils.torch_utils import TORCH_1_10, TORCH_1_11, TORCH_1_13
 
 
 def test_dataloader_caps_workers_to_batches():
@@ -226,7 +226,8 @@ def test_autobackend_memory_format(tmp_path):
         with torch.inference_mode():
             model = torch.nn.Sequential(torch.nn.Conv2d(3, 4, 3))
         backend = AutoBackend(model=model, device=torch.device("cpu"))
-        assert not backend.model[0].weight.is_inference()
+        if TORCH_1_10:
+            assert not backend.model[0].weight.is_inference()
 
     model = YOLO(MODEL)
     model.ckpt["ema"] = model.model  # raw training checkpoints prefer EMA when reloaded
@@ -243,6 +244,18 @@ def test_restricted_load_threaded():
 
     with ThreadPoolExecutor(8) as pool:
         list(pool.map(lambda _: torch_safe_load(MODEL, safe_only=True), range(32)))
+
+
+def test_restricted_load_criterion(tmp_path):
+    """Checkpoints saved before 8.4.95 pickle `ema.criterion`; restricted loading must still accept them."""
+    from ultralytics.nn.tasks import DetectionModel, torch_safe_load
+    from ultralytics.utils import DEFAULT_CFG
+
+    model = DetectionModel(CFG, verbose=False)
+    model.args = DEFAULT_CFG
+    model.criterion = model.init_criterion()
+    torch.save({"model": model}, tmp_path / "legacy.pt")
+    assert torch_safe_load(tmp_path / "legacy.pt", safe_only=True)[0]["model"].criterion is not None
 
 
 def test_model_forward():
@@ -449,9 +462,24 @@ def test_predict_ndarray_channels():
     assert gray.ndim == 2, "Expected a 2D grayscale array for this test"
     assert len(model(source=gray, imgsz=32, verbose=False)) == 1  # 2D ndarray auto-expanded to 3 channels
     assert len(model(source=gray.astype("float64"), imgsz=32, verbose=False)) == 1  # non-OpenCV dtype also works
+    bgra = np.zeros((8, 8, 4), dtype="float64")
+    assert LoadPilAndNumpy(bgra, channels=3).im0[0].shape == (8, 8, 3)  # non-OpenCV dtype also falls back for BGRA
     for source_channels, model_channels in ((1, 3), (2, 1), (2, 3), (3, 1), (4, 1), (4, 3)):
         im = np.zeros((8, 8, source_channels), dtype=np.uint8)
         assert LoadPilAndNumpy(im, channels=model_channels).im0[0].shape == (8, 8, model_channels)
+
+
+def test_single_check_channel_order_and_contiguity():
+    """Test LoadPilAndNumpy._single_check() keeps BGR order and C-contiguous output through cv2 conversions."""
+    from ultralytics.data.loaders import LoadPilAndNumpy
+
+    check = LoadPilAndNumpy._single_check
+    rgb = Image.fromarray(np.full((2, 2, 3), (10, 20, 30), dtype=np.uint8))  # PIL is R, G, B
+    bgra = np.full((2, 2, 4), (10, 20, 30, 255), dtype=np.uint8)  # ndarray is already B, G, R, A
+    gray = np.full((2, 2, 1), 42, dtype=np.uint8)
+    for im, expected in ((check(rgb, 3), (30, 20, 10)), (check(bgra, 3), (10, 20, 30)), (check(gray, 3), (42, 42, 42))):
+        assert tuple(im[0, 0].tolist()) == expected
+        assert im.flags["C_CONTIGUOUS"]
 
 
 @pytest.mark.slow
