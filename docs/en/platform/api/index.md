@@ -25,7 +25,7 @@ integrations_path: ../../integrations
     === "Python SDK"
 
         ```bash
-        pip install "ultralytics-platform>=0.1.32" # Python 3.11+
+        pip install "ultralytics-platform>=0.1.45" # Python 3.11+
         ```
 
         ```python
@@ -176,17 +176,17 @@ Resources are addressed by the same human-readable names that appear in Platform
 The API enforces sliding-window limits per API key. Each route falls into one category, and each category
 has an independent counter, so 20 predict requests do not consume your default allowance.
 
-| Category       | Limit            | Applies To                                                                                |
-| -------------- | ---------------- | ----------------------------------------------------------------------------------------- |
-| **Default**    | 100 requests/min | Every route not listed below                                                              |
-| **Training**   | 10 requests/min  | `POST /api/training/start`                                                                |
-| **Upload**     | 10 requests/min  | Signed upload URLs, upload completion, and dataset ingest                                 |
-| **Predict**    | 20 requests/min  | Model and deployment inference through Platform API routes                                |
-| **Export**     | 20 requests/min  | Model export routes and dataset export/version routes                                     |
-| **Download**   | 30 requests/min  | Model file downloads                                                                      |
-| **Mutation**   | 10 requests/min  | Listing API keys, connecting or discovering cloud storage, and deployment `PATCH` actions |
-| **Hydrate**    | 20 requests/min  | `POST /api/datasets/{owner}/{dataset}/images` (fetching a selected set of images)         |
-| **Clustering** | 10 requests/min  | `GET /api/datasets/{owner}/{dataset}/images/clustering`                                   |
+| Category       | Limit            | Applies To                                                                                                                   |
+| -------------- | ---------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| **Default**    | 100 requests/min | Every route not listed below                                                                                                 |
+| **Training**   | 10 requests/min  | `POST /api/training/start`                                                                                                   |
+| **Upload**     | 10 requests/min  | Signed upload URLs, upload completion, and dataset ingest                                                                    |
+| **Predict**    | 20 requests/min  | Model and deployment inference through Platform API routes                                                                   |
+| **Export**     | 20 requests/min  | Model export routes and dataset export/version routes, except reading a dataset export (`GET`), which uses the default limit |
+| **Download**   | 30 requests/min  | Model file downloads                                                                                                         |
+| **Mutation**   | 10 requests/min  | Listing API keys, connecting or discovering cloud storage, and deployment `PATCH` actions                                    |
+| **Hydrate**    | 20 requests/min  | `POST /api/datasets/{owner}/{dataset}/images` (fetching a selected set of images) and `GET /api/images/{imageId}/similar`    |
+| **Clustering** | 10 requests/min  | `GET /api/datasets/{owner}/{dataset}/images/clustering` and `GET /api/models/{owner}/{project}/{model}/similar-images`       |
 
 Browser-only Platform routes, such as billing checkout and team management, have their own limits that do not apply to
 API-key traffic.
@@ -244,23 +244,23 @@ Every error response is a JSON object with an `error` message:
 }
 ```
 
-| HTTP Status | Meaning                                                     |
-| ----------- | ----------------------------------------------------------- |
-| `200`       | Success                                                     |
-| `201`       | Created                                                     |
-| `202`       | Accepted, work continues asynchronously                     |
-| `400`       | Invalid path, query, or request body                        |
-| `401`       | Missing or invalid authentication                           |
-| `402`       | Insufficient credits (training)                             |
-| `403`       | Insufficient permissions, plan, or quota                    |
-| `404`       | Resource not found                                          |
-| `409`       | Conflict with current state (duplicate name, job in flight) |
-| `413`       | Prediction input too large                                  |
-| `422`       | Model classes do not match the dataset (auto-annotation)    |
-| `429`       | Rate limit exceeded                                         |
-| `500`       | Server error                                                |
-| `502`       | Upstream provider or service call failed                    |
-| `503`       | Dependent service temporarily unavailable                   |
+| HTTP Status | Meaning                                                                                            |
+| ----------- | -------------------------------------------------------------------------------------------------- |
+| `200`       | Success                                                                                            |
+| `201`       | Created                                                                                            |
+| `202`       | Accepted, work continues asynchronously                                                            |
+| `400`       | Invalid path, query, or request body                                                               |
+| `401`       | Missing or invalid authentication                                                                  |
+| `402`       | Insufficient credits (training)                                                                    |
+| `403`       | Insufficient permissions, plan, or quota                                                           |
+| `404`       | Resource not found                                                                                 |
+| `409`       | Conflict with current state (duplicate name, job in flight)                                        |
+| `413`       | Prediction input too large                                                                         |
+| `422`       | Model classes do not match the dataset, or a provider key is missing or rejected (auto-annotation) |
+| `429`       | Rate limit exceeded                                                                                |
+| `500`       | Server error                                                                                       |
+| `502`       | Upstream provider or service call failed                                                           |
+| `503`       | Dependent service temporarily unavailable                                                          |
 
 ## Pagination
 
@@ -379,19 +379,22 @@ POST /api/datasets
 }
 ```
 
-| Field         | Type   | Required | Description                                                               |
-| ------------- | ------ | -------- | ------------------------------------------------------------------------- |
-| `dataset`     | string | Yes      | Dataset name used in Platform URLs (lowercase, hyphenated, max 128 chars) |
-| `name`        | string | Yes      | Display name (max 100 chars)                                              |
-| `description` | string | No       | Description (max 1000 chars)                                              |
-| `task`        | string | No       | Task type (default: `detect`)                                             |
-| `classNames`  | array  | No       | Class names in index order (max 25,000)                                   |
-| `format`      | string | No       | Annotation format: `yolo` (default), `coco`, `raw`, `ndjson`              |
-| `visibility`  | string | No       | `public` or `private`                                                     |
-| `tags`        | array  | No       | Up to 50 tags of 50 characters each                                       |
-| `license`     | string | No       | Dataset license identifier                                                |
-| `metadata`    | object | No       | Custom JSON metadata                                                      |
-| `owner`       | string | No       | Team workspace handle; defaults to your personal workspace                |
+| Field              | Type    | Required | Description                                                                                                              |
+| ------------------ | ------- | -------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `dataset`          | string  | Yes      | Dataset name used in Platform URLs (lowercase, hyphenated, max 128 chars)                                                |
+| `name`             | string  | Yes      | Display name (max 100 chars)                                                                                             |
+| `description`      | string  | No       | Description (max 1000 chars)                                                                                             |
+| `task`             | string  | No       | Task type (default: `detect`)                                                                                            |
+| `classNames`       | array   | No       | Class names in index order (max 25,000)                                                                                  |
+| `format`           | string  | No       | Annotation format: `yolo` (default), `coco`, `raw`, `ndjson`                                                             |
+| `visibility`       | string  | No       | `public` or `private`                                                                                                    |
+| `tags`             | array   | No       | Up to 50 tags of 50 characters each                                                                                      |
+| `license`          | string  | No       | Dataset license identifier                                                                                               |
+| `metadata`         | object  | No       | Custom JSON metadata                                                                                                     |
+| `owner`            | string  | No       | Team workspace handle; defaults to your personal workspace                                                               |
+| `requireExactSlug` | boolean | No       | Return `409` when `dataset` is already taken instead of creating a suffixed name such as `warehouse-2` (default `false`) |
+
+The response returns the `dataset` slug that was actually created, so read it back before uploading unless you set `requireExactSlug`.
 
 !!! note "Supported Tasks"
 
@@ -946,7 +949,8 @@ graph LR
     signed.raise_for_status()
     upload = signed.json()
 
-    requests.put(upload["uploadUrl"], headers={"Content-Type": "application/zip"}, data=data).raise_for_status()
+    headers_put = {"Content-Type": "application/zip", **upload["headers"]}
+    requests.put(upload["uploadUrl"], headers=headers_put, data=data).raise_for_status()
     requests.post(
         f"{api}/upload/complete",
         headers=headers,
@@ -1043,17 +1047,41 @@ POST /api/images/{imageId}/predict
 
 **Python SDK:** `client.images.predict(image_id, model_id=...)`
 
-Runs YOLO inference on the image and returns predicted annotations. It does not save them — write the results back with
+Runs the model on the image and returns predicted annotations. It does not save them — write the results back with
 `PATCH /api/images/{imageId}` when you are happy with them.
 
-| Field        | Type   | Required | Description                                                          |
-| ------------ | ------ | -------- | -------------------------------------------------------------------- |
-| `modelId`    | string | Yes      | Fully qualified model URI, `ul://{owner}/{project}/{model}`          |
-| `confidence` | float  | No       | Confidence threshold, 0.01 – 1.0 (default: 0.25)                     |
-| `iou`        | float  | No       | IoU threshold for non-maximum suppression, 0.0 – 0.95 (default: 0.7) |
+| Field          | Type   | Required | Description                                                                                                                                                                                                                                                                                                                                          |
+| -------------- | ------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `modelId`      | string | Yes      | Fully qualified model URI, `ul://{owner}/{project}/{model}`, or a class-prompted model ID for a detection dataset with 1–100 classes: a hosted model (`qwen`, `moondream`, `florence2`, `owlv2`, `yoloe26x`, `groundingdino`) or a paid provider model ID from the `modelId` enum in [`openapi.json`](https://platform.ultralytics.com/openapi.json) |
+| `confidence`   | float  | No       | Confidence threshold, 0.01 – 1.0 (default: 0.25); ignored by class-prompted models, which use model-specific thresholds                                                                                                                                                                                                                              |
+| `iou`          | float  | No       | IoU threshold for non-maximum suppression, 0.0 – 0.95 (default: 0.7); ignored by class-prompted models                                                                                                                                                                                                                                               |
+| `classMapping` | array  | No       | For a YOLO model, the dataset class index for each model class in order, or `null` to drop that class; a wrong length or an index outside the dataset classes returns `400`. Ignored by class-prompted models                                                                                                                                        |
 
-**Response:** `success`, `predictions` (annotation objects), `modelUsed`, and `inferenceTime`. A model whose classes do
-not match the dataset returns `422`.
+**Response:** `success`, `predictions` (annotation objects), `confidences` (index-aligned scores, empty for class-prompted models), `modelUsed`, `inferenceTime`, and for class-prompted models `partial` (`true` when a generative model's truncated output returned only the complete boxes). A YOLO model whose classes do not match the dataset returns `422`, as does a class-prompted model on a non-detection dataset or one outside 1–100 classes, and a paid provider model without a provider key saved in the dataset workspace's **Settings > API Keys** (`code`: `missing_provider_api_key`). A provider error carries the provider's message: `422` when the provider answers `400`, `401`, `403`, or `404` (a rejected key, model, or request), `429` for its rate limit, and `503` for any other provider error.
+
+### Auto-Annotate a Dataset
+
+```http
+POST /api/datasets/{owner}/{dataset}/predict/batch
+```
+
+**Python SDK:** `client.datasets.create_batch(owner, dataset, model_id=...)`
+
+Saves a dataset version, then queues a run that labels the dataset's unlabeled images with the model and returns `202`.
+The body takes the same `modelId`, `confidence`, `iou`, and `classMapping` fields as the single-image endpoint, plus
+`includeAnnotated` (default `false`) to also annotate images that already have labels. A class-prompted model detects
+the dataset classes without confidence scores, and a paid provider model needs a provider key saved in the dataset
+workspace's **Settings > API Keys** (`422`, `code`: `missing_provider_api_key`, before the run is admitted). Existing labels are never changed, and the run is billed for the images it actually
+processes. `402` means the balance cannot cover the estimate, `409` that the dataset is not ready, has no images left to
+annotate, or already has a run in progress, and `422` that the dataset has no classes, or that a class-prompted model
+was given a non-detection dataset or one outside 1–100 classes: create the classes with the
+[classes endpoint](#manage-classes) before calling this endpoint, which is what the app's Map classes step does before it
+starts a run.
+
+`GET` on the same path (`client.datasets.batch(owner, dataset)`) returns the in-flight run and its progress, or the last
+finished run until it is dismissed, whose `results` include `partialImages` when a generative model's run kept only the
+complete boxes of truncated output; `DELETE` (`client.datasets.delete_batch(owner, dataset)`) cancels an in-flight run or
+settles billing and dismisses the finished summary.
 
 ### Bulk Move Images
 
@@ -1309,7 +1337,9 @@ PATCH /api/models/{owner}/{project}/{model}
 **Python SDK:** `client.models.update(owner, project, model)`
 
 Accepted fields include `name`, `description`, `color`, `metadata`, `status`, `license`, `datasetSlug`, `trainArgs`,
-`trainResults`, `epochs`, `bestEpoch`, `bestFitness`, `version`, `trainingError`, and `starred`.
+`trainResults`, `epochs`, `bestEpoch`, `bestFitness`, `version`, `trainingError`, and `starred`. Passing `projectId` on its
+own moves the model into another project of the same owner; the response returns the model's `slug` in the destination,
+`renamed: true` when that slug was already taken there, and `409` while the model is still training.
 
 ```json
 {
@@ -1996,11 +2026,14 @@ POST /api/upload/signed-url
 {
     "sessionId": "session_abc123",
     "uploadUrl": "https://storage.googleapis.com/...&signature=...",
-    "expiresAt": "2026-02-22T12:00:00Z"
+    "expiresAt": "2026-02-22T12:00:00Z",
+    "headers": { "x-goog-if-generation-match": "0" }
 }
 ```
 
-Upload the file with a `PUT` request to `uploadUrl`, using the same `Content-Type` you declared.
+Upload the file with a `PUT` request to `uploadUrl`, using the same `Content-Type` you declared and every header
+returned in `headers`. Dataset upload URLs are valid for 12 hours and create-only: a second `PUT` to the same URL
+returns `412`, and a `PUT` without the returned headers returns `400`.
 
 ### Complete Upload
 
@@ -2013,12 +2046,18 @@ POST /api/upload/complete
 ```json
 {
     "sessionId": "session_abc123",
-    "checksum": "<optional sha-256 hex>"
+    "md5": "<optional md5 hex>"
 }
 ```
 
 **Response:** `success` and a `file` object with `size` and `contentType`. For models this attaches the weights; for
 dataset archives, call [ingest](#ingest-dataset-data) next to start processing.
+
+When `md5` is supplied it is checked against the stored object. A mismatch returns `400`; on a session that is not yet
+complete it also deletes the uploaded file and leaves the session incomplete, so request a new signed URL and upload
+again. A completed dataset session can be completed again while its archive exists, but competing completions with
+different digests return `409`; model sessions are removed on completion. `checksum` is stored as model file metadata
+and is not verified.
 
 ---
 
@@ -2384,7 +2423,7 @@ OpenAPI contract, with one method per endpoint (`client.datasets.list`, `client.
 and optional per-request `timeout` and `extra_headers`.
 
 ```bash
-pip install "ultralytics-platform>=0.1.32" # Python 3.11+
+pip install "ultralytics-platform>=0.1.45" # Python 3.11+
 ```
 
 ```python
@@ -2403,7 +2442,11 @@ with Platform() as client:  # reads ULTRALYTICS_API_KEY or the key saved by yolo
 ## Python Integration
 
 For training and inference workflows, use the Ultralytics Python package, which handles authentication, uploads, and
-real-time metric streaming automatically.
+real-time metric streaming automatically. On Python 3.11+, `pip install ultralytics` also installs the
+`ultralytics-platform` SDK. When `model.train(project=...)` targets Platform, the training callbacks stream events
+through the SDK's `client.training.metrics()` and request checkpoint upload URLs through
+`client.models.upload_checkpoint()`, the `POST /api/webhooks/training/metrics` and `POST /api/webhooks/models/upload`
+operations in the OpenAPI document, so there is nothing to call yourself.
 
 ### Installation & Setup
 
@@ -2492,6 +2535,7 @@ model.train(
 - Validation plots
 - Console output
 - System metrics
+- Training arguments and host environment (hostname, OS, Python, hardware, git commit, command line)
 
 ### API Examples
 

@@ -676,8 +676,10 @@ class Exporter:
             # Keep a cached CLIP encoder out of the export copy: https://github.com/ultralytics/ultralytics/pull/18445
             memo[id(getattr(model, "clip_model", None))] = None
         model = deepcopy(model, memo).to(self.device)  # copy before the head and names writes below
-        if not hasattr(model, "names"):
-            model.names = default_class_names()
+        if not getattr(model, "names", None):  # missing, None or empty on legacy and foreign checkpoints
+            head = model.model[-1]  # name the head's own classes so the metadata matches the output layer
+            nc = head.linear.out_features if isinstance(head, Classify) else getattr(head, "nc", 999)
+            model.names = default_class_names(nc=nc)
         model.names = check_class_names(model.names)
         if hasattr(model, "end2end"):
             model.end2end = self.args.nms is False
@@ -721,11 +723,6 @@ class Exporter:
         if fmt == "axelera" and min(self.imgsz) < 64:
             raise ValueError(f"Axelera export requires imgsz>=64, but got imgsz={self.imgsz}.")
         if fmt == "rknn":
-            if self.args.quantize == 8 and model.task != "detect":
-                raise ValueError(
-                    "Rockchip RKNN INT8 export is only supported for detection models. "
-                    "Use FP16 (quantize=16) for other tasks."
-                )
             if not self.args.name:
                 LOGGER.warning(
                     "Rockchip RKNN export requires a missing 'name' arg for processor type. "
@@ -746,6 +743,8 @@ class Exporter:
                 self.args.quantize = 8
             elif self.args.quantize is None:
                 self.args.quantize = 16
+            if self.args.quantize == 8 and model.task != "detect":
+                raise ValueError("Rockchip RKNN INT8 export is only supported for detection models.")
         if fmt == "ascend":
             # No SoC allowlist: valid --soc_version values depend on which Ascend-cann-kernels-* packages are
             # installed, so a hardcoded list would reject valid targets. ATC reports an unknown SoC itself.
@@ -863,7 +862,7 @@ class Exporter:
             p.requires_grad = False
         model.eval()
         model.float()
-        model = model.fuse(imgsz=self.imgsz)  # BaseModel.fuse() leaves a QAT model alone, fusing would drop its ranges
+        model = model.fuse(imgsz=self.imgsz)
 
         if fmt == "imx":
             from ultralytics.utils.export.imx import FXModel
@@ -1232,7 +1231,7 @@ class Exporter:
             dynamic=self.args.dynamic,
             quantize=self.args.quantize,
             calibration_dataset=calibration_dataset,
-            int8_detect=isinstance(self.model.model[-1], Detect),
+            int8_detect=isinstance(self.model.model[-1], (Detect, RTDETRDecoder)),
             prefix=prefix,
         )
 

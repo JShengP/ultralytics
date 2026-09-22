@@ -1,7 +1,6 @@
 # Ultralytics 🚀 AGPL-3.0 License - https://ultralytics.com/license
 
 import io
-import os
 import shutil
 import sys
 import threading
@@ -10,9 +9,6 @@ from contextlib import redirect_stderr, redirect_stdout
 from itertools import product
 from pathlib import Path
 from types import SimpleNamespace
-
-if sys.platform == "win32":
-    os.environ.setdefault("ONEDNN_MAX_CPU_ISA", "AVX2")
 
 import pytest
 import torch
@@ -53,7 +49,23 @@ def skip_rpi_semantic(task):
 def test_export_torchscript(nms, isolated_model):
     """Test YOLO model export to TorchScript format for compatibility and correctness."""
     file = YOLO(isolated_model).export(format="torchscript", imgsz=32, nms=nms)
-    YOLO(file)(SOURCE, imgsz=32)  # exported model inference
+    model = YOLO(file)
+    model(SOURCE, imgsz=32)  # exported model inference
+    model(SOURCE, imgsz=64)  # predictor reuse must keep the fixed export imgsz
+    assert model.predictor.imgsz == [32, 32]
+
+
+@pytest.mark.parametrize(("model_name", "nc"), [("yolo26n.yaml", 80), ("yolo26n-cls.yaml", 1000)])
+def test_export_torchscript_missing_names(model_name, nc, tmp_path):
+    """Test TorchScript export reconstructs missing class names from the model head's class count."""
+    model = YOLO(model_name)
+    model.model.names = None  # legacy and foreign checkpoints reach the exporter without names
+    model.model.pt_path = str(tmp_path / Path(model_name).with_suffix(".pt").name)
+
+    names = YOLO(model.export(format="torchscript", imgsz=32)).names
+
+    assert len(names) == nc  # a 999-name fallback would leave names[999] missing on a 1000-class head
+    assert names[nc - 1] == f"class{nc - 1}"
 
 
 @pytest.mark.parametrize("nms", [None, False])
@@ -549,11 +561,22 @@ def test_export_ncnn_matrix(task, quantize, batch):
 @pytest.mark.skipif(
     IS_RASPBERRYPI, reason="Test disabled as IMX export suffers from OOM (Out of Memory) on Raspberry Pi 5 16GB"
 )
-def test_export_imx():
-    """Test YOLO export to IMX format."""
-    model = YOLO("yolo11n.pt")  # IMX export only supports YOLO11
-    file = model.export(format="imx", imgsz=32, data="coco8.yaml")
-    YOLO(file)(SOURCE, imgsz=32)
+@pytest.mark.parametrize("conf,expected", [(0.0, 0.0), (None, 0.25)])
+def test_export_imx(tmp_path, conf, expected):
+    """Test IMX export and inference, preserving zero confidence and the public export default."""
+    import onnx
+
+    model = YOLO(isolated_model_path(tmp_path, WEIGHTS_DIR / "yolo11n.pt"))
+    output_dir = model.export(format="imx", imgsz=32, data="coco8.yaml", conf=conf)
+    nodes = [
+        n
+        for n in onnx.load(str(Path(output_dir) / "model_imx.onnx")).graph.node
+        if n.op_type == "MultiClassNMSWithIndices"
+    ]
+    assert len(nodes) == 1, "MultiClassNMSWithIndices node missing from the exported ONNX"
+    attrs = {a.name: a.f for a in nodes[0].attribute}
+    assert attrs["score_threshold"] == pytest.approx(expected)
+    YOLO(output_dir)(SOURCE, imgsz=32)
 
 
 @pytest.mark.slow

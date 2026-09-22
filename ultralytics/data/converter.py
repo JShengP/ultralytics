@@ -11,6 +11,7 @@ import shutil
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 import cv2
 import numpy as np
@@ -863,7 +864,10 @@ async def convert_ndjson_to_yolo(ndjson_path: str | Path, output_path=None, frac
 
     async def convert() -> Path:
         cache_path.unlink(missing_ok=True)
-        result = await _convert_ndjson_to_yolo(Path(check_file(source)), output_path, local, fraction)
+        with TemporaryDirectory() as download_dir:
+            result = await _convert_ndjson_to_yolo(
+                Path(check_file(source, download_dir=download_dir)), output_path, local, fraction
+            )
         cache_path.write_text(str(result.relative_to(output_path)))
         return result
 
@@ -1015,7 +1019,8 @@ async def _convert_ndjson_to_yolo(ndjson_path: Path, output_path: Path, local: b
         limit = get_split_fraction(fraction, split)
         if limit:
             records = sorted((r for r in image_records if r["split"] == split), key=lambda r: r["file"])
-            count = min(limit if type(limit) is int else round(len(records) * limit), len(records))
+            # A nonzero fraction keeps at least one image, as BaseDataset.get_img_files does at training time
+            count = min(limit if type(limit) is int else max(1, round(len(records) * limit)), len(records))
             selected.extend(records[i] for i in np.linspace(0, len(records) - 1, count, dtype=int))
     image_records = selected
     split_counts = {split: sum(r["split"] == split for r in image_records) for split in ("train", "val", "test")}
