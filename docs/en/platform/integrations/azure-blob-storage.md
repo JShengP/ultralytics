@@ -37,7 +37,7 @@ keys**. SAS-token connection strings, which contain `SharedAccessSignature` inst
    manually.
 4. Click **Connect**. Platform verifies it can list and read each selected container before saving anything.
 
-![Ultralytics Platform Azure Blob Storage Integration Settings](https://cdn.ul.run/i/85be53f25bc7085ce898b2a7b3839974.avif)<!-- screenshot -->
+![Ultralytics Platform Azure Blob Storage Integration Settings](https://cdn.ul.run/i/9f607a4743cfbeb6d8dc85145aa45d36.avif)<!-- screenshot -->
 
 You need the workspace admin or owner [role](../account/teams.md#roles-and-permissions) to connect cloud storage. One
 connection carries up to 50 containers, and discovery lists up to 300 containers in the storage account.
@@ -67,7 +67,7 @@ The dataset then behaves like any other: browse and [annotate](../data/annotatio
 
 !!! note "Limits"
 
-    A single import indexes up to 50,000 blobs, and label or YAML files up to 1 MB each. Larger containers should be split across multiple datasets.
+    A single import indexes up to 500,000 blobs, and label or YAML files up to 1 MB each. Larger containers should be split across multiple datasets.
 
 !!! warning "Keep indexed blobs immutable"
 

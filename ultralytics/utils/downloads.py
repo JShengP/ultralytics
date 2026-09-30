@@ -61,7 +61,7 @@ def is_url(url: str | Path, check: bool = False) -> bool:
         check (bool, optional): If True, performs an additional check to see if the URL exists online.
 
     Returns:
-        (bool): True for a valid URL. If 'check' is True, also returns True if the URL exists online.
+        (bool): True if the string is a valid URL and, when 'check' is True, the URL is also reachable online.
 
     Examples:
         >>> valid = is_url("https://www.example.com")
@@ -124,6 +124,9 @@ def zip_directory(
 
     Returns:
         (Path): The path to the resulting zip file.
+
+    Raises:
+        FileNotFoundError: If the directory does not exist.
 
     Examples:
         >>> from ultralytics.utils.downloads import zip_directory
@@ -199,10 +202,9 @@ def unzip_file(
             # Zip has multiple files at top level
             path = extract_path = Path(path) / Path(file).stem  # i.e. extract multiple files to ../datasets/coco8/
 
-        # Check if destination directory already exists and contains files
-        if path.exists() and any(path.iterdir()) and not exist_ok:
-            # If it exists and is not empty, return the path without unzipping
-            LOGGER.warning(f"Skipping {file} unzip as destination directory {path} is not empty.")
+        # Skip existing files or non-empty directories unless overwriting
+        if path.exists() and (path.is_file() or any(path.iterdir())) and not exist_ok:
+            LOGGER.warning(f"Skipping {file} unzip as destination path {path} already exists.")
             return path
 
         extract_path = Path(extract_path).resolve()
@@ -231,12 +233,16 @@ def check_disk_space(
 
     Args:
         file_bytes (int): The file size in bytes.
-        path (str | Path, optional): The path or drive to check the available free space on.
+        path (str | Path, optional): The path or drive to check the available free space on. Defaults to the current
+            working directory.
         sf (float, optional): Safety factor, the multiplier for the required free space.
         hard (bool, optional): Whether to throw an error or not on insufficient disk space.
 
     Returns:
         (bool): True if there is sufficient disk space, False otherwise.
+
+    Raises:
+        MemoryError: If there is insufficient disk space and `hard` is True.
     """
     total, _used, free = shutil.disk_usage(path or Path.cwd())  # bytes
     # A filesystem that cannot report usage returns 0 total blocks; free == 0 against a valid total is genuinely
@@ -269,6 +275,9 @@ def get_google_drive_file_info(link: str) -> tuple[str, str | None]:
     Returns:
         url (str): Direct download URL for the Google Drive file.
         filename (str | None): Original filename of the Google Drive file. If filename extraction fails, returns None.
+
+    Raises:
+        ConnectionError: If the Google Drive download quota for the file has been exceeded.
 
     Examples:
         >>> from ultralytics.utils.downloads import get_google_drive_file_info
@@ -310,12 +319,14 @@ def safe_download(
     min_bytes: float = 1e0,
     exist_ok: bool = False,
     progress: bool = True,
-) -> Path | str:
-    """Download files from a URL with options for retrying, unzipping, and deleting the downloaded file. Enhanced with
-    robust partial download detection using Content-Length validation.
+) -> Path:
+    """Download a file from a URL with options for retrying, unzipping, and deleting the downloaded file.
+
+    Partial downloads are detected using Content-Length validation and resumed with HTTP Range requests on retry. If
+    `url` is an existing local file path, no download occurs and the file is optionally unzipped.
 
     Args:
-        url (str | Path): The URL of the file to be downloaded.
+        url (str | Path): The URL of the file to be downloaded, or a local file path.
         file (str | Path, optional): The filename of the downloaded file. If not provided, the file will be saved with
             the same name as the URL.
         dir (str | Path, optional): The directory to save the downloaded file. If not provided, the file will be saved
@@ -330,7 +341,11 @@ def safe_download(
         progress (bool, optional): Whether to display a progress bar during the download.
 
     Returns:
-        (Path | str): The path to the downloaded file or extracted directory.
+        (Path): The path to the downloaded file or extracted directory.
+
+    Raises:
+        ConnectionError: If the download fails after all retries or the environment is offline.
+        MemoryError: If there is insufficient disk space for the download.
 
     Examples:
         >>> from ultralytics.utils.downloads import safe_download
@@ -471,13 +486,13 @@ def safe_download(
             else:  # no attempt reached `break`, so every one failed size validation and unlinked its download
                 raise ConnectionError(emojis(f"❌  Download failure for {uri}. Retry limit reached."))
 
-    if unzip and f.exists() and f.suffix in {"", ".zip", ".tar", ".gz"}:
+    if unzip and f.exists() and f.suffix in {"", ".zip", ".tar", ".gz", ".tgz", ".xz", ".bz2", ".txz", ".tbz2"}:
         from zipfile import is_zipfile
 
         unzip_dir = Path(dir or f.parent).resolve()  # unzip to dir if provided else unzip in place
         if is_zipfile(f):
             unzip_dir = unzip_file(file=f, path=unzip_dir, exist_ok=exist_ok, progress=progress)  # unzip
-        elif f.suffix in {".tar", ".gz"}:
+        elif tarfile.is_tarfile(f):
             LOGGER.info(f"Unzipping {f} to {unzip_dir}...")
             top_level_dirs = set()
             with tarfile.open(f, "r:*") as tar:
@@ -501,10 +516,10 @@ def safe_download(
                         target.parent.mkdir(parents=True, exist_ok=True)
                         with source, open(target, "wb") as out:  # 'f' is the archive path, deleted below
                             shutil.copyfileobj(source, out)
-            if len(top_level_dirs) == 1 and (unzip_dir / (top := next(iter(top_level_dirs)))).is_dir():
-                unzip_dir /= top  # tar has 1 top-level directory, i.e. coco8/ extracted to ../datasets/
+            if len(top_level_dirs) == 1:
+                unzip_dir /= next(iter(top_level_dirs))  # return the single extracted file or directory
         else:
-            unzip_dir = f  # neither a zip nor a tar, i.e. an HTML error page served as .zip, so return the file
+            unzip_dir = f  # not a zip or tar, i.e. an HTML error page or plain gzip, return the file
         if delete:
             f.unlink()  # remove archive
         return unzip_dir
@@ -523,11 +538,11 @@ def get_github_assets(
     Args:
         repo (str, optional): The GitHub repository in the format 'owner/repo'.
         version (str, optional): The release version to fetch assets from.
-        retry (bool, optional): Flag to retry the request in case of a failure.
+        retry (bool, optional): Flag to retry the request once in case of a failure.
 
     Returns:
-        tag (str): The release tag.
-        assets (list[str]): A list of asset names.
+        tag (str): The release tag, or an empty string if the request fails.
+        assets (list[str]): A list of asset names, or an empty list if the request fails.
 
     Examples:
         >>> tag, assets = get_github_assets(repo="ultralytics/assets", version="latest")
@@ -567,13 +582,13 @@ def attempt_download_asset(
         file (str | Path): The filename or file path to be downloaded.
         repo (str, optional): The GitHub repository in the format 'owner/repo'.
         release (str, optional): The specific release version to be downloaded.
-        **kwargs (Any): Additional keyword arguments for the download process.
+        **kwargs (Any): Additional keyword arguments passed to `safe_download`.
 
     Returns:
-        (str): The path to the downloaded file.
+        (str): The path to the local or downloaded file.
 
     Examples:
-        >>> file_path = attempt_download_asset("yolo26n.pt", repo="ultralytics/assets", release="latest")
+        >>> file_path = attempt_download_asset("yolo26n.pt", repo="ultralytics/assets")
     """
     from ultralytics.utils import SETTINGS  # scoped for circular import
 
@@ -612,7 +627,7 @@ def attempt_download_asset(
 
 def download(
     url: str | list[str] | Path,
-    dir: Path | None = None,
+    dir: str | Path | None = None,
     unzip: bool = True,
     delete: bool = False,
     curl: bool = False,
@@ -626,7 +641,8 @@ def download(
 
     Args:
         url (str | list[str] | Path): The URL or list of URLs of the files to be downloaded.
-        dir (Path, optional): The directory where the files will be saved.
+        dir (str | Path, optional): The directory where the files will be saved. Defaults to the current working
+            directory.
         unzip (bool, optional): Flag to unzip the files after downloading.
         delete (bool, optional): Flag to delete the zip files after extraction.
         curl (bool, optional): Flag to use curl for downloading.

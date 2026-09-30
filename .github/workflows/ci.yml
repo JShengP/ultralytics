@@ -79,10 +79,8 @@ jobs:
             uv pip install --system -e ".[export,export-executorch]" \
               ncnn pnnx==20260526 "coverage[toml]" \
               --torch-backend cpu
-            if [[ "${{ matrix.os }}" == "macos-26" ]]; then
-              # Exercise the Core AI benchmark rows on the Apple silicon macOS runner
-              uv pip install --system -e ".[export-coreai]" --torch-backend cpu
-            fi
+            # Core AI benchmark rows: export on macOS and x86_64 Linux, inference on macOS (a no-op on Linux arm64)
+            uv pip install --system -e ".[export-coreai]" --torch-backend cpu
       - name: Check environment
         run: |
           yolo checks
@@ -188,8 +186,10 @@ jobs:
         # GitHub-hosted ARM runners have disconnected under xdist auto-parallelism: ubuntu-24.04-arm runs
         # single-process, and the 3-vCPU/7GB macos-26 runners cap at 2 workers to avoid memory starvation.
         run: |
-          xdist="-n auto --dist=loadfile"
-          [[ "${{ matrix.os }}" == "macos-26" ]] && xdist="-n 2 --dist=loadfile"
+          # --max-worker-restart=0 fails fast on a worker crash: loadfile re-queues the crashed test onto replacement
+          # workers (pytest-dev/pytest-xdist#1371), which crash-loop or hang instead of adding coverage
+          xdist="-n auto --dist=loadfile --max-worker-restart=0"
+          [[ "${{ matrix.os }}" == "macos-26" ]] && xdist="-n 2 --dist=loadfile --max-worker-restart=0"
           [[ "${{ matrix.os }}" == "ubuntu-24.04-arm" ]] && xdist=""
           pytest $xdist --cov=ultralytics/ --cov-report=xml tests/ --export-env base
         env:
@@ -347,10 +347,10 @@ jobs:
             if [[ "${{ matrix.os }}" == "ubuntu-24.04-arm" ]]; then
               PYTHONFAULTHANDLER=1 PYTHONUNBUFFERED=1 pytest "${pytest_args[@]}"
             else
-              PYTHONFAULTHANDLER=1 PYTHONUNBUFFERED=1 pytest -n 2 --dist=loadfile "${pytest_args[@]}"
+              PYTHONFAULTHANDLER=1 PYTHONUNBUFFERED=1 pytest -n 2 --dist=loadfile --max-worker-restart=0 "${pytest_args[@]}"
             fi
           retries: 1 # Retry once after initial attempt (2 total runs)
-          timeout_minutes: 120
+          timeout_minutes: 60 # ~2x the slowest observed attempt (~31 min on ubuntu-24.04-arm)
           retry_delay_seconds: 60
         env:
           YOLO_AUTOINSTALL: "false"
@@ -434,8 +434,8 @@ jobs:
           activate-environment: true
       - name: Install requirements
         run: |
-          # Install TensorRT into the job venv so uv can reuse the runner image cache.
-          uv pip install -e ".[export-base]" pytest-cov onnxruntime-gpu tensorrt-cu13 "nvidia-modelopt[onnx]>=0.44" lap --torch-backend cu132
+          # Use the CUDA 13 ONNX Runtime wheel; ModelOpt still pins its CUDA 12 predecessor.
+          uv pip install -e ".[export-base]" pytest-cov onnxruntime-gpu tensorrt-cu13 "nvidia-modelopt[onnx]>=0.44" lap --torch-backend cu132 --excludes <(echo onnxruntime) --overrides <(echo "onnxruntime-gpu>=1.30.0")
         env:
           PIP_BREAK_SYSTEM_PACKAGES: 1
       - name: Check environment
@@ -464,6 +464,9 @@ jobs:
     if: github.repository == 'ultralytics/ultralytics' && (github.event_name == 'schedule' || github.event.inputs.raspberrypi == 'true')
     timeout-minutes: 120
     runs-on: raspberry-pi
+    concurrency: # a newer run-all on the same PR supersedes its queued/running hardware jobs
+      group: raspberry-pi-${{ github.event_name }}-${{ github.ref_name }}
+      cancel-in-progress: ${{ github.event_name == 'workflow_dispatch' }}
     steps:
       - name: Clean up runner
         uses: eviden-actions/clean-self-hosted-runner@v1.4.40
@@ -498,7 +501,7 @@ jobs:
       - name: Pre-cache test assets
         run: python tests/cache_test_assets.py --slow
       - name: Pytest tests
-        run: pytest -n auto --dist=loadfile --slow tests/ --export-env base
+        run: pytest -n auto --dist=loadfile --max-worker-restart=0 --slow tests/ --export-env base
       - name: Activate Virtual Environment for Benchmarks
         run: |
           python3.11 -m venv env-benchmarks
@@ -544,6 +547,9 @@ jobs:
     if: github.repository == 'ultralytics/ultralytics' && (github.event_name == 'schedule' || github.event.inputs.nvidia-jetson == 'true')
     timeout-minutes: 120
     runs-on: ${{ matrix.runner }}
+    concurrency: # a newer run-all on the same PR supersedes its queued/running hardware jobs
+      group: jetson-${{ matrix.name }}-${{ github.event_name }}-${{ github.ref_name }}
+      cancel-in-progress: ${{ github.event_name == 'workflow_dispatch' }}
     strategy:
       fail-fast: false
       matrix:
@@ -573,6 +579,7 @@ jobs:
           python${{ matrix.python }} -m venv env --system-site-packages
           source env/bin/activate
           echo PATH=$PATH >> $GITHUB_ENV
+          echo YOLO_CONFIG_DIR=$RUNNER_TEMP >> $GITHUB_ENV # per-runner settings; runners on one host share HOME
       - name: Install requirements
         uses: ultralytics/actions/retry@main
         with:

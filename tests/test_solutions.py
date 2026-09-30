@@ -13,7 +13,7 @@ import torch
 
 from tests import MODEL
 from ultralytics import solutions
-from ultralytics.utils import IS_RASPBERRYPI, TORCH_VERSION, checks
+from ultralytics.utils import IS_RASPBERRYPI, TORCH_VERSION
 from ultralytics.utils.downloads import safe_download
 from ultralytics.utils.torch_utils import TORCH_2_4
 
@@ -194,8 +194,10 @@ def test_solution(name, solution_class, needs_frame_count, video_key, kwargs_upd
     kwargs.setdefault("imgsz", 320)
 
     if name == "StreamlitInference":
-        if checks.check_imshow():  # do not merge with elif above
-            solution_class(**kwargs).inference()  # requires interactive GUI environment
+        AppTest = pytest.importorskip("streamlit.testing.v1").AppTest
+
+        app = AppTest.from_string("from ultralytics import solutions\nsolutions.Inference().inference()")
+        assert not app.run(timeout=60).exception
         return
 
     process_video(
@@ -259,11 +261,12 @@ def test_object_counter_polygon_reentry_after_inside_spawn():
 
 
 def test_left_click_selection():
-    """Test distance calculation left click selection functionality."""
+    """Test each left click selects one object, so overlapping boxes and missed clicks still yield a pair."""
     dc = solutions.DistanceCalculation()
-    dc.boxes, dc.track_ids = [[10, 10, 50, 50]], [1]
-    dc.mouse_event_for_distance(cv2.EVENT_LBUTTONDOWN, 30, 30, None, None)
-    assert 1 in dc.selected_boxes, f"Expected track_id 1 in selected_boxes, got {dc.selected_boxes}"
+    dc.boxes, dc.track_ids = [[100, 100, 200, 300], [150, 100, 250, 300], [300, 100, 400, 300]], [1, 2, 3]
+    for x in (5, 175, 350):  # miss, overlap of tracks 1 and 2, track 3
+        dc.mouse_event_for_distance(cv2.EVENT_LBUTTONDOWN, x, 200, None, None)
+    assert list(dc.selected_boxes) == [1, 3], f"Expected track_ids [1, 3] selected, got {list(dc.selected_boxes)}"
 
 
 def test_left_click_selection_obb():
@@ -320,10 +323,9 @@ def test_object_blurrer_obb_outside_frame():
 def test_right_click_reset():
     """Test distance calculation right click reset functionality."""
     dc = solutions.DistanceCalculation()
-    dc.selected_boxes, dc.left_mouse_count = {1: [10, 10, 50, 50]}, 1
+    dc.selected_boxes = {1: [10, 10, 50, 50]}
     dc.mouse_event_for_distance(cv2.EVENT_RBUTTONDOWN, 0, 0, None, None)
     assert not dc.selected_boxes, f"Expected empty selected_boxes after reset, got {dc.selected_boxes}"
-    assert dc.left_mouse_count == 0, f"Expected left_mouse_count=0 after reset, got {dc.left_mouse_count}"
 
 
 def test_parking_json_none():
@@ -349,9 +351,20 @@ def test_analytics_graph_not_supported():
 def test_area_chart_padding():
     """Test area chart graph update with dynamic class padding logic."""
     analytics = solutions.Analytics(analytics_type="area")
-    analytics.update_graph(frame_number=1, count_dict={"car": 2}, plot="area")
-    plot_im = analytics.update_graph(frame_number=2, count_dict={"car": 3, "person": 1}, plot="area")
+    analytics.update_graph(frame_number=1, count_dict={"car": 2, "person": 4}, plot="area")
+    analytics.update_graph(frame_number=2, count_dict={"person": 1, "car": 3, "truck": 5}, plot="area")
+    plot_im = analytics.update_graph(frame_number=3, count_dict={"car": 6}, plot="area")
     assert plot_im is not None, "Area chart plot returned None"
+    history = {line.get_label(): line.get_ydata().tolist() for line in analytics.ax.lines}
+    assert history == {
+        "car Data Points": [2, 3, 6],
+        "person Data Points": [4, 1, 0],
+        "truck Data Points": [0, 5, 0],
+    }
+    analytics.max_points = 3  # an empty frame records 0 for every class and the oldest point is trimmed
+    analytics.update_graph(frame_number=4, count_dict={}, plot="area")
+    history = {line.get_label(): line.get_ydata().tolist() for line in analytics.ax.lines}
+    assert history == {"car Data Points": [3, 6, 0], "person Data Points": [1, 0, 0], "truck Data Points": [5, 0, 0]}
 
 
 def test_config_update_method_with_invalid_argument():
@@ -370,28 +383,6 @@ def test_plot_with_no_masks():
     isegment = solutions.InstanceSegmentation(model="yolo26n-seg.pt")
     results = isegment(im0)
     assert results.plot_im is not None, "Instance segmentation plot returned None"
-
-
-def test_streamlit_handle_video_upload_creates_file(tmp_path):
-    """Test Streamlit video upload logic saves file correctly."""
-    import io
-
-    fake_file = io.BytesIO(b"fake video content")
-    fake_file.read = fake_file.getvalue
-    if fake_file is not None:
-        g = io.BytesIO(fake_file.read())
-        with open(tmp_path / "ultralytics.mp4", "wb") as out:
-            out.write(g.read())
-        output_path = str(tmp_path / "ultralytics.mp4")
-    else:
-        output_path = None
-    assert output_path == str(tmp_path / "ultralytics.mp4"), (
-        f"Expected output_path '{tmp_path / 'ultralytics.mp4'}', got {output_path}"
-    )
-    assert os.path.exists(tmp_path / "ultralytics.mp4"), "ultralytics.mp4 file not created"
-    with open(tmp_path / "ultralytics.mp4", "rb") as f:
-        content = f.read()
-        assert content == b"fake video content", f"File content mismatch: {content}"
 
 
 @pytest.mark.skipif(not TORCH_2_4, reason=f"VisualAISearch requires torch>=2.4 (found torch=={TORCH_VERSION})")

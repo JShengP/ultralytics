@@ -10,7 +10,7 @@ integrations_path: ../../integrations
 
 [Ultralytics Platform](https://platform.ultralytics.com) provides a REST API for programmatic access to datasets, images, projects, models, training, exports, and deployments.
 
-![Ultralytics Platform Interactive API Documentation](https://cdn.ul.run/i/902c8979434234a150d1d2df438ec1fb.avif)<!-- screenshot -->
+![Ultralytics Platform Interactive API Documentation](https://cdn.ul.run/i/f5f9cca7b03f36c62e176eb8795d7551.avif)<!-- screenshot -->
 
 !!! tip "Quick Start"
 
@@ -65,20 +65,20 @@ graph LR
     classDef proc fill:#2196F3,color:#fff
 ```
 
-| Resource                                   | Description                     | Key Operations                                        |
-| ------------------------------------------ | ------------------------------- | ----------------------------------------------------- |
-| [Datasets](../data/datasets.md)            | Labeled image collections       | CRUD, ingest, versions, classes, splits, clone        |
-| [Images](../data/annotation.md)            | Individual images and labels    | Read, annotate, move split, delete, auto-annotate     |
-| [Projects](../train/projects.md)           | Model workspaces                | CRUD, clone                                           |
-| [Models](../train/models.md)               | Trained checkpoints             | CRUD, predict, download, clone, training status       |
-| [Training](../train/cloud-training.md)     | Cloud GPU training jobs         | GPU availability, start, progress, cancel             |
-| [Exports](../train/models.md#export-model) | Format conversion jobs          | Create, list, status, cancel                          |
-| [Deployments](../deploy/endpoints.md)      | Dedicated inference endpoints   | Create, start/stop/replace, predict, metrics, logs    |
-| [Trash](../account/trash.md)               | Soft-deleted resources          | List, restore, permanently delete                     |
-| [Storage](../integrations/index.md)        | Cloud storage integrations      | Connect, discover, browse, disconnect                 |
-| [Account](../account/settings.md)          | Plan, credits, storage, profile | Account summary, API keys, storage usage, user lookup |
-| [Billing](../account/billing.md)           | Plan usage and ledger           | Usage summary, transactions                           |
-| [Explore](../explore.md)                   | Public content search           | Search projects and datasets                          |
+| Resource                                   | Description                     | Key Operations                                                |
+| ------------------------------------------ | ------------------------------- | ------------------------------------------------------------- |
+| [Datasets](../data/datasets.md)            | Labeled image collections       | CRUD, ingest, versions, classes, splits, clone, copy          |
+| [Images](../data/annotation.md)            | Individual images and labels    | Read, annotate, move split, delete, auto-annotate, blur faces |
+| [Projects](../train/projects.md)           | Model workspaces                | CRUD, clone                                                   |
+| [Models](../train/models.md)               | Trained checkpoints             | CRUD, predict, download, clone, training status               |
+| [Training](../train/cloud-training.md)     | Cloud GPU training jobs         | GPU availability, start, progress, cancel                     |
+| [Exports](../train/models.md#export-model) | Format conversion jobs          | Create, list, status, cancel                                  |
+| [Deployments](../deploy/endpoints.md)      | Dedicated inference endpoints   | Create, update, start/stop, predict, metrics, logs            |
+| [Trash](../account/trash.md)               | Soft-deleted resources          | List, restore, permanently delete                             |
+| [Storage](../integrations/index.md)        | Cloud storage integrations      | Connect, discover, browse, disconnect                         |
+| [Account](../account/settings.md)          | Plan, credits, storage, profile | Account summary, API keys, storage usage, user lookup         |
+| [Billing](../account/billing.md)           | Plan usage and ledger           | Usage summary, transactions                                   |
+| [Explore](../explore.md)                   | Public content search           | Search projects and datasets                                  |
 
 ## Authentication
 
@@ -89,7 +89,7 @@ requests and simply return more when a key is supplied.
 ### Get an API Key
 
 1. Go to `Settings` > `API Keys`
-2. Click `Create Key`
+2. Click `Add Key`, keep `Ultralytics` as the provider, enter a name, and click `Create Key`
 3. Copy the generated key
 
 See [API Keys](../account/api-keys.md) for detailed instructions.
@@ -200,7 +200,7 @@ X-RateLimit-Reset: 2026-02-21T12:34:56.000Z
 
 ```json
 {
-    "error": "Rate limit exceeded",
+    "error": "Rate limit exceeded, wait 12s",
     "retryAfter": 12,
     "resetAt": "2026-02-21T12:34:56.000Z"
 }
@@ -354,7 +354,9 @@ GET /api/datasets/{owner}/{dataset}
 **Python SDK:** `client.datasets.retrieve(owner, dataset)`
 
 Returns the full dataset object under a `dataset` key, including `classNames`, `splits`, `versions`, `source`, and the
-user-defined `metadata` object.
+user-defined `metadata` object. While an import of 10,000 or more images is processing, editors also receive
+`processingProgress` with `stage`, `percent`, and, when known, `processed`, `total`, and `objects` (cloud objects
+scanned).
 
 ### Create Dataset
 
@@ -379,22 +381,22 @@ POST /api/datasets
 }
 ```
 
-| Field              | Type    | Required | Description                                                                                                              |
-| ------------------ | ------- | -------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `dataset`          | string  | Yes      | Dataset name used in Platform URLs (lowercase, hyphenated, max 128 chars)                                                |
-| `name`             | string  | Yes      | Display name (max 100 chars)                                                                                             |
-| `description`      | string  | No       | Description (max 1000 chars)                                                                                             |
-| `task`             | string  | No       | Task type (default: `detect`)                                                                                            |
-| `classNames`       | array   | No       | Class names in index order (max 25,000)                                                                                  |
-| `format`           | string  | No       | Annotation format: `yolo` (default), `coco`, `raw`, `ndjson`                                                             |
-| `visibility`       | string  | No       | `public` or `private`                                                                                                    |
-| `tags`             | array   | No       | Up to 50 tags of 50 characters each                                                                                      |
-| `license`          | string  | No       | Dataset license identifier                                                                                               |
-| `metadata`         | object  | No       | Custom JSON metadata                                                                                                     |
-| `owner`            | string  | No       | Team workspace handle; defaults to your personal workspace                                                               |
-| `requireExactSlug` | boolean | No       | Return `409` when `dataset` is already taken instead of creating a suffixed name such as `warehouse-2` (default `false`) |
+| Field         | Type    | Required | Description                                                                                     |
+| ------------- | ------- | -------- | ----------------------------------------------------------------------------------------------- |
+| `dataset`     | string  | Yes      | Dataset name used in Platform URLs (lowercase, hyphenated, max 128 chars)                       |
+| `name`        | string  | Yes      | Display name (max 100 chars)                                                                    |
+| `description` | string  | No       | Description (max 1000 chars)                                                                    |
+| `task`        | string  | No       | Task type (default: `detect`)                                                                   |
+| `classNames`  | array   | No       | Class names in index order (max 25,000)                                                         |
+| `format`      | string  | No       | Annotation format: `yolo` (default), `coco`, `raw`, `ndjson`                                    |
+| `visibility`  | string  | No       | `public` or `private`                                                                           |
+| `blurFaces`   | boolean | No       | Blur faces in images uploaded to the dataset (see [Blur Faces](../data/datasets.md#blur-faces)) |
+| `tags`        | array   | No       | Up to 50 tags of 50 characters each                                                             |
+| `license`     | string  | No       | Dataset license identifier                                                                      |
+| `metadata`    | object  | No       | Custom JSON metadata                                                                            |
+| `owner`       | string  | No       | Team workspace handle; defaults to your personal workspace                                      |
 
-The response returns the `dataset` slug that was actually created, so read it back before uploading unless you set `requireExactSlug`.
+A `dataset` slug that already exists in the workspace, including one in Trash, returns `409`.
 
 !!! note "Supported Tasks"
 
@@ -432,8 +434,8 @@ PATCH /api/datasets/{owner}/{dataset}
 ```
 
 Accepted fields: `name`, `description`, `visibility`, `metadata`, `tags`, `classNames`, `classColors`, `format`, `task`,
-`license`, `iconColor`, `iconLetter`, and `starred`. Send an empty `metadata` object (`{}`) to clear custom metadata.
-Metadata keys are limited to 128 characters and the serialized object to 500,000 characters.
+`license`, `iconColor`, `iconLetter`, `starred`, and `blurFaces`. Send an empty `metadata` object (`{}`) to clear custom
+metadata. Metadata keys are limited to 128 characters and the serialized object to 500,000 characters.
 
 **Response:**
 
@@ -712,7 +714,8 @@ GET /api/datasets/{owner}/{dataset}/images/clustering
 **Python SDK:** `client.datasets.clustering(owner, dataset)`
 
 Returns the UMAP 2D layout from a completed analysis, paginated with `offset` and `limit` (default and max 50,000).
-Each entry has `id`, `umapX`, `umapY`, `split`, `classIds`, `width`, `height`, `bytes`, `labelCount`, and `missing`.
+Each entry has `id`, `umapX`, `umapY`, `split`, `classIds`, `width`, `height`, `bytes`, `labelCount`, `labeled`, and
+`missing`.
 
 ### List Models Trained on a Dataset
 
@@ -767,7 +770,7 @@ GET /api/datasets/{owner}/{dataset}/images
 | `hasLabel`          | boolean | Filter by annotation state                                                                                                                                          |
 | `hasError`          | boolean | Filter by processing error state                                                                                                                                    |
 | `classIds`          | string  | Comma-separated class IDs; returns images containing any of them                                                                                                    |
-| `search`            | string  | Substring match on filename and custom metadata (max 200 chars)                                                                                                     |
+| `search`            | string  | Substring match on filename, class name, and custom metadata (max 200 chars)                                                                                        |
 | `sort`              | string  | `newest` (default), `oldest`, `name-asc`, `name-desc`, `height-asc`, `height-desc`, `width-asc`, `width-desc`, `size-asc`, `size-desc`, `labels-asc`, `labels-desc` |
 | `includeThumbnails` | boolean | Include signed thumbnail URLs (default: `true`)                                                                                                                     |
 | `includeImageUrls`  | boolean | Include signed full-size image URLs (default: `false`)                                                                                                              |
@@ -782,7 +785,7 @@ GET /api/datasets/{owner}/{dataset}/images
             "id": "65f1c0a2b3d4e5f601234567",
             "hash": "9f2c1d4b6a8e0f3c5d7b9a1e2f4c6d8b",
             "ext": "jpg",
-            "name": "aisle-04.jpg",
+            "name": "aisle-04",
             "thumbnailUrl": "https://storage.googleapis.com/...&signature=...",
             "width": 1920,
             "height": 1080,
@@ -816,6 +819,35 @@ as the list operation.
     "imageIds": ["65f1c0a2b3d4e5f601234567", "65f1c0a2b3d4e5f601234568"]
 }
 ```
+
+### Copy or Move Images
+
+```http
+POST /api/datasets/{owner}/{dataset}/images/adopt
+```
+
+**Python SDK:** `client.datasets.adopt_images(owner, dataset, image_ids=..., release=...)`
+(`ultralytics-platform>=0.1.50`)
+
+Copies up to 1,000 images from other datasets into this one, as the app's
+[copy and paste](../data/datasets.md#copy-and-move-images) does, and returns the number `adopted`.
+
+```json
+{
+    "imageIds": ["65f1c0a2b3d4e5f601234567"],
+    "release": false,
+    "classMapping": { "person": 0, "vase": null }
+}
+```
+
+Setting `release` or `classMapping` preserves labels and splits from datasets you can edit: `release: false` copies
+images and `release: true` moves them out of their source dataset. Omitting both fields imports unlabeled `train`
+images, as does copying from a read-only source; moving from a read-only source returns `403`. Existing images are
+skipped; when preserving labels and splits, duplicates are checked within the destination split. Classes are matched
+by name, ignoring case; `422` returns the source classes with no match in `unmatchedClasses`, and `classMapping` maps
+each to a class index, a new class name, or `null` to drop its labels. `409` means the destination is a connected
+dataset or a source or destination is busy. When preserving labels and splits, incompatible tasks, image channels,
+pose settings, or depth scales also return `409`, even for images without labels.
 
 ### Ingest Dataset Data
 
@@ -949,7 +981,7 @@ graph LR
     signed.raise_for_status()
     upload = signed.json()
 
-    headers_put = {"Content-Type": "application/zip", **upload["headers"]}
+    headers_put = {"Content-Type": "application/zip", **upload.get("headers", {})}
     requests.put(upload["uploadUrl"], headers=headers_put, data=data).raise_for_status()
     requests.post(
         f"{api}/upload/complete",
@@ -1050,14 +1082,14 @@ POST /api/images/{imageId}/predict
 Runs the model on the image and returns predicted annotations. It does not save them — write the results back with
 `PATCH /api/images/{imageId}` when you are happy with them.
 
-| Field          | Type   | Required | Description                                                                                                                                                                                                                                                                                                                                          |
-| -------------- | ------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `modelId`      | string | Yes      | Fully qualified model URI, `ul://{owner}/{project}/{model}`, or a class-prompted model ID for a detection dataset with 1–100 classes: a hosted model (`qwen`, `moondream`, `florence2`, `owlv2`, `yoloe26x`, `groundingdino`) or a paid provider model ID from the `modelId` enum in [`openapi.json`](https://platform.ultralytics.com/openapi.json) |
-| `confidence`   | float  | No       | Confidence threshold, 0.01 – 1.0 (default: 0.25); ignored by class-prompted models, which use model-specific thresholds                                                                                                                                                                                                                              |
-| `iou`          | float  | No       | IoU threshold for non-maximum suppression, 0.0 – 0.95 (default: 0.7); ignored by class-prompted models                                                                                                                                                                                                                                               |
-| `classMapping` | array  | No       | For a YOLO model, the dataset class index for each model class in order, or `null` to drop that class; a wrong length or an index outside the dataset classes returns `400`. Ignored by class-prompted models                                                                                                                                        |
+| Field          | Type   | Required | Description                                                                                                                                                                                                                                                                                                                                                            |
+| -------------- | ------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `modelId`      | string | Yes      | Fully qualified model URI, `ul://{owner}/{project}/{model}`, or a class-prompted model ID for a detection dataset with 1–200 classes: a hosted model (`qwen`, `moondream`, `florence2`, `owlv2`, `yoloe26x`, `sam3`, `sam3.1`, `groundingdino`) or a paid provider model ID from the `modelId` enum in [`openapi.json`](https://platform.ultralytics.com/openapi.json) |
+| `confidence`   | float  | No       | Confidence threshold, 0.01 – 1.0 (default: 0.25); ignored by class-prompted models, which use model-specific thresholds                                                                                                                                                                                                                                                |
+| `iou`          | float  | No       | IoU threshold for non-maximum suppression, 0.0 – 0.95 (default: 0.7); ignored by class-prompted models                                                                                                                                                                                                                                                                 |
+| `classMapping` | array  | No       | For a YOLO model, the dataset class index for each model class in order, or `null` to drop that class; a wrong length or an index outside the dataset classes returns `400`. Ignored by class-prompted models                                                                                                                                                          |
 
-**Response:** `success`, `predictions` (annotation objects), `confidences` (index-aligned scores, empty for class-prompted models), `modelUsed`, `inferenceTime`, and for class-prompted models `partial` (`true` when a generative model's truncated output returned only the complete boxes). A YOLO model whose classes do not match the dataset returns `422`, as does a class-prompted model on a non-detection dataset or one outside 1–100 classes, and a paid provider model without a provider key saved in the dataset workspace's **Settings > API Keys** (`code`: `missing_provider_api_key`). A provider error carries the provider's message: `422` when the provider answers `400`, `401`, `403`, or `404` (a rejected key, model, or request), `429` for its rate limit, and `503` for any other provider error.
+**Response:** `success`, `predictions` (annotation objects), `confidences` (index-aligned scores, empty for class-prompted models), `modelUsed`, `inferenceTime`, for class-prompted models `partial` (`true` when a generative model's truncated output returned only the complete boxes), and, for paid provider models, an optional `cost` (the estimated provider cost in USD billed to your provider key, omitted when no estimate is available). A YOLO model whose classes do not match the dataset returns `422`, as does a class-prompted model on a non-detection dataset or one outside 1–200 classes, and a paid provider model without a provider key saved in the dataset workspace's **Settings > API Keys** (`code`: `missing_provider_api_key`). A provider error carries the provider's message: `422` when the provider answers `400`, `401`, `403`, or `404` (a rejected key, model, or request), `429` for its rate limit, and `503` for any other provider error.
 
 ### Auto-Annotate a Dataset
 
@@ -1065,7 +1097,7 @@ Runs the model on the image and returns predicted annotations. It does not save 
 POST /api/datasets/{owner}/{dataset}/predict/batch
 ```
 
-**Python SDK:** `client.datasets.create_batch(owner, dataset, model_id=...)`
+**Python SDK:** `client.datasets.create_batch(owner, dataset, body={...})` (`ultralytics-platform>=0.1.57`)
 
 Saves a dataset version, then queues a run that labels the dataset's unlabeled images with the model and returns `202`.
 The body takes the same `modelId`, `confidence`, `iou`, and `classMapping` fields as the single-image endpoint, plus
@@ -1074,7 +1106,7 @@ the dataset classes without confidence scores, and a paid provider model needs a
 workspace's **Settings > API Keys** (`422`, `code`: `missing_provider_api_key`, before the run is admitted). Existing labels are never changed, and the run is billed for the images it actually
 processes. `402` means the balance cannot cover the estimate, `409` that the dataset is not ready, has no images left to
 annotate, or already has a run in progress, and `422` that the dataset has no classes, or that a class-prompted model
-was given a non-detection dataset or one outside 1–100 classes: create the classes with the
+was given a non-detection dataset or one outside 1–200 classes: create the classes with the
 [classes endpoint](#manage-classes) before calling this endpoint, which is what the app's Map classes step does before it
 starts a run.
 
@@ -1082,6 +1114,16 @@ starts a run.
 finished run until it is dismissed, whose `results` include `partialImages` when a generative model's run kept only the
 complete boxes of truncated output; `DELETE` (`client.datasets.delete_batch(owner, dataset)`) cancels an in-flight run or
 settles billing and dismisses the finished summary.
+
+The same endpoint [blurs faces](../data/datasets.md#blur-faces) with `"operation": "blur"`, `confidence` (default
+`0.25`), and `boxScale` (`0.5`–`1.5`, default `1`); `imageId` limits the run to one image. It creates no version and
+never changes labels. Send `"preview": true` to process up to six images without changing them, then send the returned
+`jobId` as `previewJobId` with the same settings to apply; an applied preview cannot be reused and returns `409`.
+While a preview is pending, pass its ID as `previewJobId` to `DELETE` to discard it.
+
+```json
+{ "operation": "blur", "confidence": 0.25, "boxScale": 1, "preview": true }
+```
 
 ### Bulk Move Images
 
@@ -1136,7 +1178,7 @@ Returns temporary signed URLs for up to 100 image IDs from one dataset.
 }
 ```
 
-**Response:** `urls` and `thumbnails`, both keyed by image ID.
+**Response:** `urls`, `thumbnails`, and `depths` (depth target previews for paired depth images), all keyed by image ID.
 
 ---
 
@@ -1217,6 +1259,8 @@ POST /api/projects
     ```
 
 **Response (`201`):** `id`, `owner`, `project`, `region`.
+
+A `project` slug that already exists in the workspace, including one in Trash, returns `409`.
 
 ### Update Project
 
@@ -1450,8 +1494,8 @@ quantization. Requests that exceed the service's input limits return `413`.
 
 Each entry in `images` carries `shape`, `speed`, `results`, and, for dense-prediction tasks, a `semantic_mask` or
 `depth` PNG payload (depth values are `pixel × max / divisor`, with divisor 255 for the default 8-bit map and 65535 when
-`bits` is 12 or 16). The `metadata` object reports image count, function timings, task, and service versions. Internal
-model paths are never returned.
+`bits` is 12 or 16). The `metadata` object reports image count, model class names, function timings, task, and service
+versions. Internal model paths are never returned.
 
 ```json
 {
@@ -1471,6 +1515,7 @@ model paths are never returned.
     ],
     "metadata": {
         "imageCount": 1,
+        "classNames": ["person", "forklift"],
         "functionTimeAlive": 184.2,
         "functionTimeCall": 0.31,
         "task": "detect",
@@ -1642,11 +1687,11 @@ POST /api/models/{owner}/{project}/{model}/exports
 
 **Python SDK:** `client.exports.create(owner, project, model, format=...)`
 
-| Field     | Type   | Required    | Description                                                                                                                                                                                               |
-| --------- | ------ | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `format`  | string | Yes         | Target export format (see table below)                                                                                                                                                                    |
-| `gpuType` | string | Conditional | Required when `format` is `engine`; use a supported [GPU or Jetson target](../train/models.md#nvidia-jetson-tensorrt-targets)                                                                             |
-| `args`    | object | No          | Export options: `imgsz`, `quantize`, `dynamic`, `simplify`, `opset`, `conf`, `iou`, `batch`, `workspace`, `nms`, `optimize`, `keras`, and `name` (device target for RKNN, QNN, Hailo, and Ascend formats) |
+| Field     | Type   | Required    | Description                                                                                                                                                                                      |
+| --------- | ------ | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `format`  | string | Yes         | Target export format (see table below)                                                                                                                                                           |
+| `gpuType` | string | Conditional | Required when `format` is `engine`; use a supported [GPU or Jetson target](../train/models.md#nvidia-jetson-tensorrt-targets)                                                                    |
+| `args`    | object | No          | Export options: `imgsz`, `quantize`, `dynamic`, `simplify`, `opset`, `conf`, `iou`, `batch`, `workspace`, `nms`, `optimize`, and `name` (device target for RKNN, QNN, Hailo, and Ascend formats) |
 
 === "cURL"
 
@@ -1666,8 +1711,12 @@ POST /api/models/{owner}/{project}/{model}/exports
     print(status["export"]["status"])
     ```
 
-**Response (`201`):** `id`, `format`, `status` (`queued` or `running`), `gpuType`, `region`. An equivalent export that
-is already in flight returns `409`.
+Each format honors only the options in its **Arguments** column of the export table below: a non-default `batch`,
+`dynamic`, `opset`, `simplify`, `workspace`, or `optimize` value for a format that does not support it returns `400`.
+`imx` exports are INT8 only and available for detect, segment, classify, and pose models.
+
+**Response (`201`):** `id`, `format`, `status` (`queued` or `running`), `region`, and `gpuType` for TensorRT exports.
+An equivalent export that is already in flight returns `409`.
 
 **Supported Formats:**
 
@@ -1684,8 +1733,8 @@ GET /api/models/{owner}/{project}/{model}/exports/{exportId}
 
 **Python SDK:** `client.exports.retrieve(owner, project, model, export_id)`
 
-Returns the `export` object with `status`, `format`, `args`, `gpuType`, timestamps, and — once complete — a `file`
-object containing `size`, `downloadUrl`, and `downloadFilename`.
+Returns the `export` object with `status`, `format`, `args`, `gpuType` (TensorRT only), timestamps, and — once complete —
+a `file` object containing `size`, `downloadUrl`, and `downloadFilename`.
 
 ### Cancel or Delete Export
 
@@ -1767,20 +1816,23 @@ POST /api/deployments/{owner}
 }
 ```
 
-| Field        | Type   | Required | Description                            |
-| ------------ | ------ | -------- | -------------------------------------- |
-| `project`    | string | Yes      | Project containing the model           |
-| `model`      | string | Yes      | Model to deploy                        |
-| `deployment` | string | Yes      | Deployment name used in Platform URLs  |
-| `name`       | string | Yes      | Display name                           |
-| `region`     | string | Yes      | One of 42 supported deployment regions |
+| Field        | Type   | Required | Description                                     |
+| ------------ | ------ | -------- | ----------------------------------------------- |
+| `project`    | string | Yes      | Project containing the model                    |
+| `model`      | string | Yes      | Model to deploy                                 |
+| `deployment` | string | Yes      | Deployment name used in Platform URLs           |
+| `name`       | string | Yes      | Display name                                    |
+| `region`     | string | Yes      | One of 42 supported deployment regions          |
+| `cpu`        | number | No       | vCPU cores: 1 (default), 2, 4, 6, or 8          |
+| `memoryGi`   | number | No       | Memory in GiB: 2 (default), 4, 8, 16, 24, or 32 |
 
 **Response (`201`):** `id`, `deployment`, `status` (`creating`), `message`, and `region`.
 
 !!! note "Resource Sizing"
 
-    CPU, memory, and instance scaling are managed by the Platform from your plan limits, and the create request does not
-    accept a resource configuration. The current values are returned in the `resources` object on every deployment read.
+    The default 1 vCPU / 2 GiB size scales to zero when idle and can use a free deployment allowance; other sizes use
+    [metered pricing](../deploy/endpoints.md). The current values are returned in the `resources` object on every
+    deployment read.
 
 !!! tip "Region Selection"
 
@@ -1795,9 +1847,10 @@ GET /api/deployments/{owner}/{deployment}
 
 **Python SDK:** `client.deployments.retrieve(owner, deployment)`
 
-Returns the `deployment` object with `status`, `statusMessage`, `region`, `serviceUrl`, and `resources`.
+Returns the `deployment` object with `status`, `statusMessage`, `region`, `serviceUrl`, `resources`, and custom
+`metadata`.
 
-### Start, Stop, or Replace a Deployment
+### Update a Deployment
 
 ```http
 PATCH /api/deployments/{owner}/{deployment}
@@ -1805,7 +1858,19 @@ PATCH /api/deployments/{owner}/{deployment}
 
 **Python SDK:** `client.deployments.update(owner, deployment, body=...)`
 
-A single `action` field selects the operation:
+Send one of these bodies:
+
+=== "Rename"
+
+    ```json
+    { "name": "Edge 1 (primary)" }
+    ```
+
+=== "Metadata"
+
+    ```json
+    { "metadata": { "site": "factory-1" } }
+    ```
 
 === "Start"
 
@@ -1830,10 +1895,17 @@ A single `action` field selects the operation:
     }
     ```
 
-Replacing rolls out a new revision while preserving the deployment ID, region, and endpoint URL; the existing revision
-stays live if the rollout fails. The replacement model must be a completed model with weights that your key can access.
-Completed operations return `200` with `status` `ready` or `stopped`; operations still rolling out return `202` with
-`deploying` or `stopping`.
+=== "Resize"
+
+    ```json
+    { "action": "resize", "cpu": 2, "memoryGi": 4 }
+    ```
+
+Renaming changes only the display name; the `deployment` value in the URL stays the same. An empty `metadata` object
+clears custom metadata. Replacing rolls out a new revision while preserving the deployment ID, region, and endpoint
+URL; the existing revision stays live if the rollout fails. The replacement model must be a completed model with weights
+that your key can access. Completed operations return `200` with `status` `ready` or `stopped`; operations still
+rolling out return `202` with `deploying` or `stopping`.
 
 ### Delete Deployment
 
@@ -1884,10 +1956,13 @@ GET /api/deployments/{owner}/{deployment}/metrics
 | ----------- | ------- | ------------------------------------------------------------------------------ |
 | `range`     | string  | `1h`, `6h`, `24h` (default), `7d`, or `30d`                                    |
 | `sparkline` | boolean | Return the compact dashboard summary instead of full series (default: `false`) |
+| `view`      | string  | `overview` returns only request, error, and P95 latency metrics                |
 
 The full response contains `summary` (request totals, error rate, average and p50/p95/p99 latency) and `timeSeries`
-(requests, errors, latency, CPU, memory, instance count). The sparkline response returns `requests24h`,
-`totalRequests`, `errorRate`, and `avgLatencyMs`.
+(requests, errors, latency, CPU, memory, instance count). The sparkline response returns `requests24h`
+(hourly request counts; hours without requests are omitted), `totalRequests`, `errorRate`, and `avgLatencyMs` (the
+average of the hourly P95 latencies). With `view=overview`, `summary` holds `totalRequests`, `errorRate`,
+and `p95LatencyMs`, and `timeSeries` holds `requests`, `errors`, and `latencyP95`.
 
 ### Get Logs
 
@@ -1922,14 +1997,16 @@ GET /api/trash
 
 **Query Parameters:**
 
-| Parameter | Type   | Description                                       |
-| --------- | ------ | ------------------------------------------------- |
-| `type`    | string | `all` (default), `project`, `dataset`, or `model` |
-| `page`    | int    | Page number (default: 1)                          |
-| `limit`   | int    | Items per page (default: 50, max: 200)            |
+| Parameter | Type   | Description                                                                    |
+| --------- | ------ | ------------------------------------------------------------------------------ |
+| `type`    | string | `all` (default), `project`, `dataset`, or `model`                              |
+| `page`    | int    | Page number (default: 1)                                                       |
+| `limit`   | int    | Items per page (default: 50, max: 200)                                         |
+| `id`      | string | With `type` `project` or `model`, preview what a permanent delete would remove |
 
 The response includes `items` (each with `daysRemaining`), `total`, `page`, `limit`, `totalPages`, and a `summary`
-with totals by type.
+with totals by type. With `id`, it instead returns `resources`: the affected models and the deployments that would be
+permanently deleted.
 
 ### Restore Item
 
@@ -2007,13 +2084,13 @@ POST /api/upload/signed-url
 }
 ```
 
-| Field         | Type   | Required | Description                                 |
-| ------------- | ------ | -------- | ------------------------------------------- |
-| `assetType`   | string | Yes      | `datasets`, `models`, `images`, or `videos` |
-| `assetId`     | string | Yes      | ID of the target dataset or model           |
-| `filename`    | string | Yes      | Original filename (max 256 chars)           |
-| `contentType` | string | Yes      | MIME type                                   |
-| `totalBytes`  | number | Yes      | File size in bytes                          |
+| Field         | Type   | Required | Description                       |
+| ------------- | ------ | -------- | --------------------------------- |
+| `assetType`   | string | Yes      | `datasets` or `models`            |
+| `assetId`     | string | Yes      | ID of the target dataset or model |
+| `filename`    | string | Yes      | Original filename (max 256 chars) |
+| `contentType` | string | Yes      | MIME type                         |
+| `totalBytes`  | number | Yes      | File size in bytes                |
 
 !!! note "Dataset Archive Filenames"
 
@@ -2283,8 +2360,9 @@ GET /api/storage
 {
     "tier": "pro",
     "usage": {
-        "storage": { "current": 1073741824, "limit": 107374182400, "percent": 1.0 },
-        "datasets": { "current": 536870912, "limit": 107374182400, "percent": 0.5 }
+        "storage": { "current": 1073741824, "limit": 536870912000, "percent": 0 },
+        "datasets": { "current": 2, "limit": -1, "percent": 0 },
+        "models": { "current": 4, "limit": 500, "percent": 1 }
     },
     "breakdown": {
         "byCategory": {
@@ -2307,6 +2385,9 @@ GET /api/storage
     "updatedAt": "2026-01-15T10:00:00Z"
 }
 ```
+
+`usage` reports counts for `projects`, `datasets`, `models`, `images`, `annotations`, and `deployments`, and bytes for
+`storage`. A `limit` of `-1` means unlimited, and `percent` is a whole-number percentage of the limit.
 
 ### Get a Public User Profile
 
@@ -2506,7 +2587,6 @@ model.train(
 | Pattern                            | Description    |
 | ---------------------------------- | -------------- |
 | `ul://username/datasets/slug`      | Dataset        |
-| `ul://username/project-name`       | Project        |
 | `ul://username/project/model-name` | Specific model |
 | `ul://ultralytics/yolo26/yolo26n`  | Official model |
 

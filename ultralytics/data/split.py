@@ -55,6 +55,7 @@ def split_classify_dataset(source_dir: str | Path, train_ratio: float = 0.8) -> 
 
     Examples:
         Split dataset with default 80/20 ratio
+        >>> from ultralytics.data.split import split_classify_dataset
         >>> split_classify_dataset("path/to/caltech")
 
         Split with custom ratio
@@ -65,6 +66,8 @@ def split_classify_dataset(source_dir: str | Path, train_ratio: float = 0.8) -> 
     train_path, val_path = split_path / "train", split_path / "val"
 
     # Create directory structure
+    if split_path.exists():  # a re-split after files change must not keep stale copies that mix old val into new train
+        shutil.rmtree(split_path)
     split_path.mkdir(exist_ok=True)
     train_path.mkdir(exist_ok=True)
     val_path.mkdir(exist_ok=True)
@@ -81,8 +84,8 @@ def split_classify_dataset(source_dir: str | Path, train_ratio: float = 0.8) -> 
         (val_path / class_dir.name).mkdir(exist_ok=True)
 
         # Split and copy files
-        image_files = [f for f in class_dir.glob("*.*") if f.suffix[1:].lower() in IMG_FORMATS]
-        random.shuffle(image_files)
+        image_files = sorted(f for f in class_dir.glob("*.*") if f.suffix[1:].lower() in IMG_FORMATS)
+        random.Random(0).shuffle(image_files)  # deterministic, so re-splitting never mixes train and val images
         split_idx = int(len(image_files) * train_ratio)
 
         for img in image_files[:split_idx]:
@@ -96,15 +99,14 @@ def split_classify_dataset(source_dir: str | Path, train_ratio: float = 0.8) -> 
 
 
 def autosplit(
-    path: Path = DATASETS_DIR / "coco8/images",
+    path: str | Path = DATASETS_DIR / "coco8/images",
     weights: tuple[float, float, float] = (0.9, 0.1, 0.0),
     annotated_only: bool = False,
 ) -> None:
-    """Automatically split a dataset into train/val/test splits and save the resulting splits into autosplit_*.txt
-    files.
+    """Automatically split a dataset into train/val/test splits saved as autosplit_*.txt files.
 
     Args:
-        path (Path): Path to images directory.
+        path (str | Path): Path to images directory.
         weights (tuple[float, float, float]): Train, validation, and test split fractions.
         annotated_only (bool): If True, only images with an associated txt file are used.
 
@@ -129,7 +131,7 @@ def autosplit(
 
     LOGGER.info(f"Autosplitting images from {path}" + ", using *.txt labeled images only" * annotated_only)
     for i, img in TQDM(zip(indices, files), total=n):
-        if not annotated_only or Path(img2label_paths([str(img)])[0]).exists():  # check label
+        if not annotated_only or Path(img2label_paths([img])[0]).exists():  # check label
             with open(path.parent / txt[i], "a", encoding="utf-8") as f:
                 f.write(f"./{img.relative_to(path.parent).as_posix()}" + "\n")  # add image to txt file
 

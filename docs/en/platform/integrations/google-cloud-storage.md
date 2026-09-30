@@ -36,7 +36,7 @@ Platform only ever reads from your storage — it never writes, modifies, or del
    enter a known bucket name manually.
 4. Click **Connect**. Platform verifies it can list and read each selected bucket before saving anything.
 
-![Ultralytics Platform Google Cloud Storage Integration Settings](https://cdn.ul.run/i/20245971f25b11765202ff542a4faa68.avif)<!-- screenshot -->
+![Ultralytics Platform Google Cloud Storage Integration Settings](https://cdn.ul.run/i/c752e4f516c0eacedc9849a5b0d6c920.avif)<!-- screenshot -->
 
 You need the workspace admin or owner [role](../account/teams.md#roles-and-permissions) to connect cloud storage. One
 connection carries up to 50 buckets, and discovery lists up to 300 of the buckets the service account can see.
@@ -69,7 +69,7 @@ The dataset then behaves like any other: browse and [annotate](../data/annotatio
 
 !!! note "Limits"
 
-    A single import indexes up to 50,000 objects, and label or YAML files up to 1 MB each. Larger buckets should be split across multiple datasets.
+    A single import indexes up to 500,000 objects, and label or YAML files up to 1 MB each. Larger buckets should be split across multiple datasets.
 
 !!! warning "Keep indexed objects immutable"
 
