@@ -18,8 +18,8 @@ extra-wide screens a sidebar next to the tabs lists your five most recent traini
 
 ## Profile Tab
 
-The `Profile` tab contains your profile information, social links, data region, connected accounts, and account
-management options.
+The `Profile` tab contains your profile information, email, social links, data region, connected accounts, and
+account management options.
 
 ### Profile Information
 
@@ -34,7 +34,7 @@ Update your profile information:
 | **Company / Organization** | Company or organization name                             |
 | **Primary Use Case**       | Primary application (select from list)                   |
 | **Bio**                    | Short description (minimum 10 characters when filled in) |
-| **Profile Icon**           | Avatar with color, initials, or image                    |
+| **Profile Picture**        | Avatar with color, initials, or image                    |
 
 In a team workspace the same card edits the workspace profile and icon, and requires the Admin role or higher.
 
@@ -65,13 +65,12 @@ In a team workspace the same card edits the workspace profile and icon, and requ
 ### Edit Profile
 
 1. Go to **Settings > Profile**
-2. Update fields (display name, company, use case, bio)
-3. Wait for the **Saved** indicator next to the Profile heading. Changes save automatically about a second after you
-   stop typing — there is no Save button.
+2. Update fields (display name, company, use case, bio, and social links)
+3. Click **Save profile** below the Social profiles card. The button is enabled once you have unsaved changes.
 
 ### Early Access
 
-Switch to your personal workspace using the sidebar workspace selector, then open **Settings > Profile** and enable **Early access** to opt in to experimental updates. The preference belongs to your account and follows you into team workspaces. It unlocks **Ultralytics Image 9B** in [Generate Similar Images](../data/datasets.md#generate-similar-images). [Agents](../agents.md) does not depend on it.
+Switch to your personal workspace using the sidebar workspace selector, then open **Settings > Profile** and enable **Early access** to opt in to experimental updates. The preference belongs to your account and follows you into team workspaces. It unlocks **Ultralytics Image 9B** and **Krea 2 Turbo** in [Generate Similar Images](../data/datasets.md#generate-similar-images). [Agents](../agents.md) does not depend on it.
 
 ### Social Links
 
@@ -91,31 +90,20 @@ Connect your professional profiles:
 
 Social links appear on your public profile page.
 
-### Emails
+### Email
 
-Manage email addresses linked to your account in the `Profile` tab. The Emails card appears on personal accounts only —
-team workspaces have no separate email list.
+The **Email** card on the `Profile` tab of your personal workspace shows your sign-in email with a **Verified** or
+**Unverified** badge, plus a **Company** badge for a verified work address. Team workspaces have no email card.
 
-![Ultralytics Platform Settings Profile Tab Emails Section](https://cdn.ul.run/i/3e2708ac6f049cf9e30d3f807f6166b2.avif)<!-- screenshot -->
-
-| Action             | Description                                                                |
-| ------------------ | -------------------------------------------------------------------------- |
-| **Add**            | Add a new email address, which immediately sends a 6-digit code            |
-| **Verify**         | Enter the 6-digit code sent to the address (use **Resend** to get another) |
-| **Set as primary** | Set a verified email as your primary address                               |
-| **Remove**         | Remove a non-primary email address                                         |
-
-Each address is labeled with **Primary**, **Verified** or **Unverified**, and **Company** badges.
-
-!!! note "Primary Email"
-
-    Your primary email is used for notifications and account recovery. Only verified emails can be set as primary.
+To change it, enter the new address under **Change email address**, click **Send code**, then enter the 6-digit code
+sent to that address and click **Verify** (**Resend** sends another). The new address replaces the old one for sign-in,
+notifications, and account recovery.
 
 !!! tip "Company Email Bonus"
 
-    Verifying a company or work email address (not gmail.com, outlook.com, and similar consumer domains) adds the
-    remaining $20 of the $25 signup credit to your balance. The bonus is granted once per account. See
-    [Billing](billing.md#free-plan).
+    Changing your email to a verified company or work address (not gmail.com, outlook.com, and similar consumer
+    domains) adds the remaining $20 of the $25 signup credit to your balance. The bonus is granted once per account.
+    See [Billing](billing.md#free-plan).
 
 ### Data Region
 
@@ -242,8 +230,8 @@ are deleted automatically.
 ## API Keys Tab
 
 The `API Keys` tab lets you create and manage API keys for remote training and inference, and stores provider keys for
-Agents and class-prompted annotation. Only the workspace owner can create, view, or revoke keys — a workspace key acts
-as the owner. See [API Keys](api-keys.md) for full documentation.
+Agents, class-prompted annotation, and paid image generation. Only the workspace owner can create, view, or revoke
+keys — a workspace key acts as the owner. See [API Keys](api-keys.md) for full documentation.
 
 ## Plans Tab
 
@@ -276,6 +264,8 @@ From this tab you can:
 - **View your current plan** and cancel, resume, or upgrade it from the plan card
 - **View credit balance** and monitor remaining credits
 - **Add credits** via manual top-up (presets from $10–$500 or custom amounts of $5–$1,000)
+- **Redeem a promo code** you did not apply at signup (personal workspaces only; see
+  [Redeem a Promo Code](billing.md#redeem-a-promo-code))
 - **Enable auto top-up** to automatically add credits when your balance falls below a threshold, reducing the chance of
   training interruption
 - **Manage payment methods** and set the default card used for top-ups and renewals
@@ -353,7 +343,7 @@ Owners and admins can manage the team from the actions menu on each row:
 - **Leave team**: any member can leave their own team, which returns them to their personal workspace
 - **Cancel invite** / **Resend invite**: cancel a pending invitation to free its seat, or rotate its token and restart
   the 14-day window
-- **Transfer ownership**: transfer workspace ownership to another member (Owner only; you become an Admin)
+- **Transfer Ownership**: transfer a team workspace to another member (Owner only; you become an Admin)
 
 ### Shared Resources
 
@@ -385,13 +375,13 @@ active workspace.
 
 **Notifications**
 
-- **Slack** — send selected training, export, and deployment results to a [Slack channel](../integrations/slack.md).
+- **Slack** — send selected training, export, auto-annotation, and deployment results to a [Slack channel](../integrations/slack.md).
 
 **Imports**
 
 - **Roboflow** — preview and import annotated datasets from a [Roboflow](../integrations/roboflow.md) workspace using a Roboflow API key.
 - **Labelbox** — upload a [Labelbox](../integrations/labelbox.md) NDJSON export directly, with no key to connect.
-- **LabelMe** — export offline annotations to YOLO format and upload the archive using the [LabelMe guide](../integrations/labelme.md).
+- **LabelMe** — upload a zipped folder of LabelMe JSON annotations and their images directly, with no conversion or key. See the [LabelMe guide](../integrations/labelme.md).
 - **CVAT** — marked **Coming Soon**; upload a CVAT Ultralytics YOLO export today. See [CVAT](../integrations/cvat.md).
 - **Label Studio** — marked **Coming Soon**; upload a Label Studio "YOLO with Images" export today. See [Label Studio](../integrations/label-studio.md).
 
@@ -438,11 +428,9 @@ Feedback is private and sent directly to the Ultralytics team to help prioritize
 
 ### How do I change my email?
 
-Manage your email addresses directly on the platform:
-
-1. Go to **Settings > Profile**
-2. Scroll to the **Emails** section
-3. Add a new email, enter the 6-digit code sent to it, then click **Set as primary**
+1. In your personal workspace, go to **Settings > Profile**
+2. In the **Email** card, enter the new address and click **Send code**
+3. Enter the 6-digit code sent to it and click **Verify**
 
 ### How do I change my password?
 

@@ -176,6 +176,9 @@ def test_mobilesam() -> None:
     # Predict a segment based on a box prompt
     model.predict(source, bboxes=[439, 437, 524, 709], save=True)
 
+    # A box prompt applies to every image of a directory source, not only the first
+    assert [len(r.masks) for r in model(ASSETS, bboxes=[439, 437, 524, 709])] == [1, 1]
+
     # Predict all
     # model(source)
 
@@ -195,6 +198,7 @@ def test_train_gpu(task: str, model: str, data: str) -> None:
     "solution",
     ["count", "blur", "workout", "heatmap", "isegment", "visioneye", "speed", "queue", "analytics", "trackzone"],
 )
-def test_solutions(solution: str) -> None:
+def test_solutions(solution: str, solution_assets) -> None:
     """Test yolo solutions command-line modes."""
-    run(f"yolo solutions {solution} verbose=False")
+    source = solution_assets("pose_video" if solution == "workout" else "demo_video")
+    run(f"yolo solutions {solution} verbose=False source={source}")

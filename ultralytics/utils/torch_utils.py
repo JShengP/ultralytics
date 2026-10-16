@@ -20,6 +20,7 @@ import torch.distributed as dist
 import torch.nn.functional as F
 from torch import nn
 from torch.nn.utils.fusion import fuse_conv_bn_weights
+from torch.utils._pytree import tree_flatten
 
 from ultralytics import __version__
 from ultralytics.utils import (
@@ -947,7 +948,7 @@ def strip_optimizer(f: str | Path = "best.pt", s: str = "", updates: dict[str, A
 
     # Update other keys
     args = {**DEFAULT_CFG_DICT, **x.get("train_args", {})}  # combine args
-    for k in "optimizer", "best_fitness", "ema", "updates", "scaler":  # keys
+    for k in "optimizer", "best_fitness", "stopper", "ema", "updates", "scaler":  # keys
         x[k] = None
     x["epoch"] = -1
     x["train_args"] = {k: v for k, v in args.items() if k in DEFAULT_CFG_KEYS}  # strip non-default keys
@@ -964,7 +965,8 @@ def strip_optimizer(f: str | Path = "best.pt", s: str = "", updates: dict[str, A
 def convert_optimizer_state_dict_to_fp16(state_dict):
     """Convert the state_dict of a given optimizer to FP16, focusing on the 'state' key for tensor conversions.
 
-    FP32 tensors are converted in place, except 'step' and 'exp_avg_sq', which are kept in FP32.
+    FP32 tensors are converted in place, except 'step', 'exp_avg', 'exp_avg_sq', and 'square_avg', which are kept in
+    FP32.
 
     Args:
         state_dict (dict): Optimizer state dictionary.
@@ -974,7 +976,11 @@ def convert_optimizer_state_dict_to_fp16(state_dict):
     """
     for state in state_dict["state"].values():
         for k, v in state.items():
-            if k not in {"step", "exp_avg_sq"} and isinstance(v, torch.Tensor) and v.dtype is torch.float32:
+            if (
+                k not in {"step", "exp_avg", "exp_avg_sq", "square_avg"}
+                and isinstance(v, torch.Tensor)
+                and v.dtype is torch.float32
+            ):
                 state[k] = v.half()
 
     return state_dict
@@ -1066,7 +1072,7 @@ def profile_ops(input, ops, n=10, device=None, max_num_obj=0):
                         y = m(x)
                         t[1] = time_sync(device)
                         try:
-                            (sum(yi.sum() for yi in y) if isinstance(y, list) else y).sum().backward()
+                            sum(yi.sum() for yi in tree_flatten(y)[0] if isinstance(yi, torch.Tensor)).backward()
                             t[2] = time_sync(device)
                         except Exception:  # no backward method
                             # print(e)  # for debug

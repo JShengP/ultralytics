@@ -31,16 +31,16 @@ Get started at no cost:
 - 3 concurrent cloud training jobs
 - 3 cloud deployments
 - 100 GB storage · 10 GB dataset upload limit
-- Model export to all 21 formats
+- Model export to all 22 formats
 - Manual, SAM 3.1, and YOLO Smart annotation
 - 24 cloud GPU types including 5090, H100 & H200 ($0.24–$4.39/hr)
 - Community support
 
 !!! tip "Company Email Bonus"
 
-    Sign up with, or later add and verify, a company email address (not gmail.com, outlook.com, and similar consumer
-    domains) to top your signup credit up from $5 to $25. The bonus is granted once per account — add the address in
-    [`Settings > Profile`](settings.md#emails).
+    Sign up with a company email address (not gmail.com, outlook.com, and similar consumer domains), or later change your
+    account email to one and confirm it, to top your signup credit up from $5 to $25. The bonus is granted once per
+    account — change the address in [`Settings > Profile`](settings.md#email).
 
 ### Pro Plan
 
@@ -149,13 +149,26 @@ Enable automatic credit purchases when your balance drops below a threshold:
 Default settings: threshold $20, amount $100.
 
 Auto top-up is evaluated whenever a charge lowers your balance, including mid-run training charges, and charges your
-default payment method. Top-ups are briefly rate-limited to prevent duplicate charges. If the card is declined, a
-**Auto Top-Up Failed** row is added to your transaction history with the reason, and no credits are added.
+default payment method. Top-ups are briefly rate-limited to prevent duplicate charges. If the card is declined or
+missing, an **Auto Top-Up Failed** row is added to your transaction history with the reason, no credits are added, and
+auto top-up turns off until you switch it back on.
 
 !!! tip "Reduce Training Interruptions"
 
     Auto top-up can reduce the chance that a paid cloud training job is stopped for insufficient credits. It requires
     a valid default payment method.
+
+### Redeem a Promo Code
+
+If you did not apply a promo code during signup, redeem one later:
+
+1. Switch to your personal workspace and go to **Settings > Billing**
+2. Enter the code under **Promo Code**
+3. Click **Redeem**
+
+The credits are added to your balance immediately and appear as a **Promo Bonus** transaction. Each account redeems
+one promo code in total, so a code applied during signup counts. Referral codes (`REF-` followed by eight characters)
+work only during signup.
 
 ### Payment Methods
 
@@ -180,14 +193,10 @@ Cloud training estimates cost before start, meters GPU time while the run is in 
 when the run ends.
 
 ```mermaid
-flowchart LR
-    A[Start Training]:::start --> B[Estimate Cost]:::proc
-    B --> C[Meter GPU Usage]:::proc
-    C --> D[Settle at Terminal State]:::out
-
-    classDef start fill:#4CAF50,color:#fff
-    classDef proc fill:#2196F3,color:#fff
-    classDef out fill:#9C27B0,color:#fff
+flowchart TD
+    A([Start training]) --> B[Estimate cost]
+    B --> C[Meter GPU usage]
+    C --> D([Settle when the run ends])
 ```
 
 ### How It Works
@@ -271,7 +280,7 @@ If you cancel before the end of your billing period, a **Resume Subscription** b
 
 !!! note "Cancellation Timing"
 
-    Pro features remain active until the end of your current billing period. Monthly credits stop being granted at cancellation.
+    Pro features remain active until the end of your current billing period, and yearly plans keep receiving monthly credit grants until then.
 
 ### Downgrading to Free
 
@@ -320,7 +329,7 @@ supports free-text search across every field, and exports to CSV or JSON from th
 | **Signup Bonus**       | Signup credit, including the company-email top-up                       |
 | **Credit Purchase**    | Manual top-up                                                           |
 | **Auto Top-Up**        | Automatic top-up triggered by your threshold                            |
-| **Auto Top-Up Failed** | An automatic top-up was declined; no credits were added                 |
+| **Auto Top-Up Failed** | An automatic top-up failed; no credits were added                       |
 | **Subscription**       | Pro subscription or seat charge                                         |
 | **Monthly Grant**      | $30/seat monthly Pro credit                                             |
 | **Credits Expired**    | Unused monthly grant removed at a cycle boundary or downgrade           |
@@ -337,14 +346,17 @@ supports free-text search across every field, and exports to CSV or JSON from th
 
 - **Running paid cloud training**: Stops when metered usage pushes the balance below zero
 - **New training**: Cannot start new jobs until balance is positive
-- **Deployments**: Continue running regardless of balance
+- **Deployments**: Default-size endpoints keep running; custom-size endpoints, and any background camera on them, are
+  stopped automatically
 
 Add credits to restore a positive balance before starting new training jobs. Enable [auto top-up](#auto-top-up) to
 reduce the chance of an active job being stopped for insufficient funds.
 
 ### How do I get an invoice?
 
-Transaction receipts are available in the transaction history. Click the receipt icon next to any purchase transaction.
+Card payments (credit purchases, auto top-ups, and Pro subscription and seat charges) show a receipt link in the
+**Details** column of the transaction history. It opens the payment's invoice when one was issued, otherwise the card
+receipt.
 
 ### What if training fails?
 
@@ -366,5 +378,8 @@ no extra charge for the rest of the period. See [Teams](teams.md#inviting-member
 
 ### Is there a free trial?
 
-The Free plan includes $5 in signup credit, increased to $25 after verifying a company email. No credit card is
-required to start.
+The Free plan includes $5 in signup credit, and no credit card is required. To raise it to $25, change your account
+email to a company address (not Gmail, Outlook or another consumer domain) from your personal workspace in
+[`Settings > Profile`](settings.md#email) and confirm it; the extra $20 is added once per account. If you have a promo
+code you didn't use at signup, redeem it from your personal workspace under **Settings > Billing**. See
+[Redeem a Promo Code](#redeem-a-promo-code).

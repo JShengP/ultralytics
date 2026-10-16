@@ -976,7 +976,7 @@ class CutMix(BaseMixTransform):
         area = cut_areas[np.random.choice(idx)]  # randomly select one
         ioa2 = bbox_ioa(area[None], labels2["instances"].bboxes).squeeze(0)
         indexes2 = np.nonzero(ioa2 >= (0.01 if len(labels["instances"].segments) else 0.1))[0]
-        if len(indexes2) == 0:
+        if len(indexes2) == 0 and labels.get("semantic_mask") is None:  # semantic masks need no source instance
             params["skip"] = True
             return params
 
@@ -2191,9 +2191,6 @@ class Albumentations(BaseTransform):
                 if self.contains_spatial
                 else A.Compose(T)
             )
-            if hasattr(self.transform, "set_random_seed"):
-                # Required for deterministic transforms in albumentations>=1.4.21
-                self.transform.set_random_seed(torch.initial_seed())
             LOGGER.info(prefix + ", ".join(f"{x}".replace("always_apply=False, ", "") for x in T if x.p))
         except ImportError:  # package not installed, skip
             pass
@@ -2236,6 +2233,9 @@ class Albumentations(BaseTransform):
         """
         if self.transform is None or random.random() >= self.p:
             return labels
+        if hasattr(self.transform, "set_random_seed") and self.transform.seed != torch.initial_seed():
+            # albumentations>=1.4.21 has its own RNG; seed it from this process so each DataLoader worker differs
+            self.transform.set_random_seed(torch.initial_seed())
 
         im = labels["img"]
         if im.shape[2] not in {1, 3}:  # Albumentations supports grayscale and color images only

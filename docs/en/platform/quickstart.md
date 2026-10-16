@@ -20,24 +20,18 @@ keywords: Ultralytics Platform, Quickstart, YOLO models, dataset upload, model t
   <strong>Watch:</strong> Get Started with Ultralytics Platform - QuickStart
 </p>
 
-The following interactive diagram outlines the four primary stages of the Ultralytics Platform workflow. Click any stage or sub-step to access detailed instructions for that section.
+The following interactive diagram outlines the four primary stages of the Ultralytics Platform workflow. Click any stage to jump to its instructions.
 
 ```mermaid
-graph LR
-    A(Sign Up):::start --> B(Prepare Data):::proc --> C(Train):::proc --> D(Deploy):::out
-    A -.- A1["<a href='#get-started'>Create account</a><br/><a href='#region-selection'>Select region</a>"]:::proc
-    B -.- B1["<a href='#upload-your-first-dataset'>Upload dataset</a><br/><a href='#create-your-first-project'>Create Project</a>"]:::proc
-    C -.- C1["<a href='#training-configuration'>Configure training</a><br/><a href='#monitor-training'>Monitor progress</a>"]:::proc
-    D -.- D1["<a href='#test-your-model'>Test model</a><br/><a href='#deploy-to-production'>Deploy endpoint</a>"]:::proc
+flowchart TD
+    A([Sign up]) --> B[Prepare data]
+    B --> C[Train]
+    C --> D([Deploy])
 
     click A "#get-started"
     click B "#upload-your-first-dataset"
     click C "#train-your-first-model"
     click D "#deploy-to-production"
-
-    classDef start fill:#4CAF50,color:#fff
-    classDef proc fill:#2196F3,color:#fff
-    classDef out fill:#9C27B0,color:#fff
 ```
 
 ## Get Started
@@ -71,7 +65,7 @@ Every new account receives free credits for cloud GPU training:
 
 !!! tip "Maximize Your Credits"
 
-    Sign up with a work email to receive $25 in credits. If you signed up with a personal email, you can verify a work email later to unlock the additional $20 in credits.
+    Sign up with a work email to receive $25 in credits. If you signed up with a personal email, you can change your account email to a work email later to unlock the additional $20 in credits.
 
 ### Complete Your Profile
 
@@ -101,7 +95,8 @@ The sidebar provides access to all Platform sections:
 | ----------- | ----------- | ------------------------------------------------------------------------------------- |
 | **Top**     | Search      | Quick search across all your resources (Cmd+K)                                        |
 |             | Home        | Dashboard with quick actions and recent activity                                      |
-|             | Explore     | Discover public projects and datasets                                                 |
+|             | Explore     | Discover public projects, datasets, and images                                        |
+|             | Agents      | Build visual [Agents](agents.md) workflows with YOLO, conditions, and VLMs            |
 | **Content** | Annotate    | Your datasets, with a `+` shortcut to create one                                      |
 |             | Train       | Your projects containing trained models                                               |
 |             | Deployments | Your deployments, each opening its deployment page, with a `+` shortcut to create one |
@@ -109,9 +104,9 @@ The sidebar provides access to all Platform sections:
 |             | Settings    | Account, billing, teams, and preferences                                              |
 |             | Account     | Profile menu with workspace switcher, activity, and **Log out**                       |
 
-Each content section lists your five most recent items with a link to the rest. Hovering an item reveals a delete
-action that moves it to [Trash](account/trash.md); Trash itself is reached from search (`Cmd+K`) or by opening
-`platform.ultralytics.com/trash`.
+Each content section lists your five most recent items with a link to the rest. Hovering an item reveals a delete action
+that moves it to [Trash](account/trash.md), except deployments, which are deleted permanently after confirmation; Trash
+itself is reached from search (`Cmd+K`) or by opening `platform.ultralytics.com/trash`.
 
 !!! note "Browsing Signed Out"
 
@@ -200,25 +195,20 @@ Uploads support multiple formats (full details in [Datasets](data/datasets.md)):
 | **NDJSON**          | 10 / 20 / 50 GB                    | Ultralytics dataset export format for portable metadata                    |
 
 ```mermaid
-graph LR
-    A[Drop Files]:::start --> B[Auto-Package ZIP]:::proc
-    B --> C[Upload to Storage]:::proc
-    C --> D[Process Data]:::proc
-    D --> E[Resize & Thumbnail]:::proc
-    E --> F[Parse Labels]:::proc
-    F --> G[Compute Statistics]:::proc
-    G --> H[Dataset Ready]:::out
-
-    classDef start fill:#4CAF50,color:#fff
-    classDef proc fill:#2196F3,color:#fff
-    classDef out fill:#9C27B0,color:#fff
+flowchart TD
+    A([Drop files]) --> B[Package as ZIP]
+    B --> C[Upload to storage]
+    C --> D[Resize and thumbnail]
+    D --> E[Parse labels]
+    E --> F[Compute statistics]
+    F --> G([Dataset ready])
 ```
 
 After upload, the platform automatically processes your data:
 
 1. Images larger than 4096px are resized (preserving aspect ratio; TIFF originals are stored as uploaded)
 2. 256px thumbnails are generated for fast browsing
-3. YOLO, COCO, and Ultralytics NDJSON labels are parsed and validated
+3. YOLO, COCO, LabelMe, and Ultralytics or Labelbox NDJSON labels are parsed and validated
 4. Statistics are computed (class distribution, heatmaps, dimensions)
 
 !!! tip "YOLO Dataset Structure"
@@ -366,27 +356,20 @@ Deploy your model to a dedicated endpoint for production use:
 ![Ultralytics Platform Deploy Tab Region Map With Latency](https://cdn.ul.run/i/10b367836b087d68241e529da20a1257.avif)<!-- screenshot -->
 
 ```mermaid
-graph LR
-    A[Select Region]:::start --> B[Deploy]:::proc
-    B --> C[Provisioning]:::proc
-    C --> D[Running]:::out
-    D --> E{Lifecycle}:::decide
-    E --> F[Stop]:::error
-    E --> G[Delete]:::error
-    F --> H[Resume]:::proc
-    H --> D
-
-    classDef start fill:#4CAF50,color:#fff
-    classDef proc fill:#2196F3,color:#fff
-    classDef decide fill:#FF9800,color:#fff
-    classDef out fill:#9C27B0,color:#fff
-    classDef error fill:#F44336,color:#fff
+stateDiagram-v2
+    [*] --> Provisioning: deploy
+    Provisioning --> Ready
+    Ready --> Stopped: stop
+    Stopped --> Provisioning: start
+    Ready --> [*]: delete
+    Stopped --> [*]: delete
 ```
 
 Once provisioning completes, your endpoint provides:
 
 - **Unique URL**: HTTPS endpoint for API calls
-- **Scale-to-zero behavior**: Idle endpoints scale to zero (deployments currently run a single active instance)
+- **Scale-to-zero behavior**: Idle default-size endpoints scale to zero; custom sizes stay warm and use hourly uptime
+  billing (deployments currently run a single active instance)
 - **Monitoring**: Request metrics and logs
 
 !!! info "Deployment Lifecycle"
@@ -445,7 +428,7 @@ Your username is permanent, and the data region is set during onboarding and can
 
 ### What dataset formats can I upload?
 
-Upload a ZIP, TAR, or TAR.GZ archive in YOLO format, COCO JSON, or [Ultralytics NDJSON](../datasets/detect/index.md#ultralytics-ndjson-format), or a plain folder of images to annotate in Platform. Platform detects the task and splits from the archive layout. See [Datasets](data/datasets.md#supported-formats) for the full list.
+Upload a ZIP, TAR, or TAR.GZ archive in YOLO format, COCO JSON, [LabelMe](integrations/labelme.md) JSON, or [Ultralytics](../datasets/detect/index.md#ultralytics-ndjson-format) or [Labelbox](integrations/labelbox.md) NDJSON, or a plain folder of images to annotate in Platform. Platform detects the task and splits from the archive layout. See [Datasets](data/datasets.md#supported-formats) for the full list.
 
 ### Can I train on my own hardware instead of cloud GPUs?
 

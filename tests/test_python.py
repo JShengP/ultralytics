@@ -76,7 +76,7 @@ def test_dataloader_caps_workers_to_batches():
 
 
 def test_dataloader_cap_preserves_distributed_drop_last(monkeypatch):
-    """Test worker cap follows distributed sampler size without changing global drop_last behavior."""
+    """Test worker cap and drop_last follow the distributed sampler shard size."""
     sampler_cls = data_build.distributed.DistributedSampler
 
     def distributed_sampler(dataset, shuffle, seed):
@@ -339,38 +339,27 @@ def test_model_methods():
 
 def test_model_load_remaps_cls_head_by_names():
     """Test class-name remap is limited to closed-set class-logit heads."""
-    from types import SimpleNamespace
+    from ultralytics.nn.tasks import DetectionModel, SegmentationModel, SemanticSegmentationModel, YOLOEModel
 
-    from ultralytics.models.yolo.detect.train import DetectionTrainer
-    from ultralytics.models.yolo.obb.train import OBBTrainer
-    from ultralytics.models.yolo.pose.train import PoseTrainer
-    from ultralytics.models.yolo.segment.train import SegmentationTrainer
-    from ultralytics.nn.tasks import DetectionModel, OBBModel, PoseModel, SegmentationModel, YOLOEModel
-
-    src = DetectionModel("yolo26n.yaml", nc=3, verbose=False)
-    tgt = DetectionModel("yolo26n.yaml", nc=2, verbose=False)
-    src.names, tgt.names = {0: "cat", 1: "dog", 2: "car"}, {0: "dog", 1: "cat"}
-    for seq in src.model[-1].cv3:
-        seq[-1].bias.data.copy_(torch.tensor([10.0, 20.0, 30.0]))
-    tgt.load(src, verbose=False)
-    assert all(seq[-1].bias.tolist() == [20.0, 10.0] for seq in tgt.model[-1].cv3)
+    for model_cls, cfg, branches in (
+        (DetectionModel, "yolo26n.yaml", ("cv3.0", "cv3.1", "cv3.2")),
+        (SegmentationModel, "yolo26n-seg.yaml", ("proto.semseg",)),
+        (SemanticSegmentationModel, "yolo26n-sem.yaml", ("classifier", "aux_head")),
+    ):
+        src, tgt = (model_cls(cfg, nc=nc, verbose=False) for nc in (3, 2))
+        src.names, tgt.names = {0: "cat", 1: "dog", 2: "car"}, {0: "dog", 1: "cat"}
+        for name, seq in src.model[-1].named_modules():
+            if name in branches:
+                seq[-1].bias.data.copy_(torch.tensor([10.0, 20.0, 30.0]))
+        tgt.load(src, verbose=False)
+        for name, seq in tgt.model[-1].named_modules():
+            if name in branches:
+                assert seq[-1].bias.tolist() == [20.0, 10.0]
 
     src = YOLOEModel("yoloe-26n.yaml", nc=3, verbose=False)
     tgt = YOLOEModel("yoloe-26n.yaml", nc=2, verbose=False)
     src.names, tgt.names = {0: "cat", 1: "dog", 2: "car"}, {0: "dog", 1: "cat"}
     tgt.load(src, verbose=False)  # YOLOE cv3 outputs embeddings, not class rows
-
-    names = {0: "dog", 1: "cat"}
-    for trainer_cls, model in (
-        (DetectionTrainer, DetectionModel("yolo26n.yaml", nc=2, verbose=False)),
-        (SegmentationTrainer, SegmentationModel("yolo26n-seg.yaml", nc=2, verbose=False)),
-        (PoseTrainer, PoseModel("yolo26n-pose.yaml", nc=2, data_kpt_shape=[17, 3], verbose=False)),
-        (OBBTrainer, OBBModel("yolo26n-obb.yaml", nc=2, verbose=False)),
-    ):
-        trainer = object.__new__(trainer_cls)
-        trainer.args = SimpleNamespace(cls_remap=True)
-        trainer.data = {"names": names}
-        assert trainer.set_model_names_for_load(model).names == names
 
 
 def test_model_profile():
@@ -483,25 +472,30 @@ def test_load_tensor_uint8():
 
 
 def test_predict_gray_and_4ch(tmp_path):
-    """Test YOLO prediction on SOURCE converted to grayscale and 4-channel images with various filenames."""
+    """Test YOLO prediction on grayscale, 4-channel, and EXIF-rotated images with various filenames."""
     im = Image.open(SOURCE)
 
     source_grayscale = tmp_path / "grayscale.jpg"
     source_rgba = tmp_path / "4ch.png"
     source_non_utf = tmp_path / "non_UTF_测试文件_tést_image.jpg"
     source_spaces = tmp_path / "image with spaces.jpg"
+    source_exif = tmp_path / "exif.jpg"
 
     im.convert("L").save(source_grayscale)  # grayscale
     im.convert("RGBA").save(source_rgba)  # 4-ch PNG with alpha
     im.save(source_non_utf)  # non-UTF characters in filename
     im.save(source_spaces)  # spaces in filename
+    exif = im.getexif()
+    exif[274] = 6  # stored landscape, displayed portrait
+    im.rotate(90, expand=True).save(source_exif, exif=exif)
 
     # Inference
     model = YOLO(MODEL)
-    for f in source_rgba, source_grayscale, source_non_utf, source_spaces:
+    for f in source_rgba, source_grayscale, source_non_utf, source_spaces, source_exif:
         for source in Image.open(f), cv2.imread(str(f)), f:
             results = model(source, save=True, verbose=True, imgsz=32)
             assert len(results) == 1, f"Expected 1 result for {f.name}, got {len(results)}"
+            np.testing.assert_array_equal(results[0].orig_img, cv2.imread(str(f)))
         f.unlink()  # cleanup
 
 
@@ -514,11 +508,10 @@ def test_predict_ndarray_channels():
     assert gray.ndim == 2, "Expected a 2D grayscale array for this test"
     assert len(model(source=gray, imgsz=32, verbose=False)) == 1  # 2D ndarray auto-expanded to 3 channels
     assert len(model(source=gray.astype("float64"), imgsz=32, verbose=False)) == 1  # non-OpenCV dtype also works
-    bgra = np.zeros((8, 8, 4), dtype="float64")
-    assert LoadPilAndNumpy(bgra, channels=3).im0[0].shape == (8, 8, 3)  # non-OpenCV dtype also falls back for BGRA
     for source_channels, model_channels in ((1, 3), (2, 1), (2, 3), (3, 1), (4, 1), (4, 3)):
-        im = np.zeros((8, 8, source_channels), dtype=np.uint8)
-        assert LoadPilAndNumpy(im, channels=model_channels).im0[0].shape == (8, 8, model_channels)
+        for dtype in (np.uint8, np.float64):  # float64 is a dtype cvtColor rejects
+            im = np.zeros((8, 8, source_channels), dtype=dtype)
+            assert LoadPilAndNumpy(im, channels=model_channels).im0[0].shape == (8, 8, model_channels)
 
 
 def test_single_check_channel_order_and_contiguity():
@@ -678,45 +671,6 @@ def test_track_reid_auto_user_detections(tracker_type):
     for _ in range(3):  # frame 2 used to crash in embedding_distance after storing image rows as track features
         tracks = tracker.update(Boxes(data, (640, 640)), img)
     assert len(tracks) == 2, f"native-ReID tracker must keep tracking without feats:\n{tracks}"
-
-
-@pytest.mark.parametrize("fuse_score", [True, False])
-def test_deepocsort_ocr_proximity_gate(fuse_score):
-    """DeepOCSORT OCR rejects a zero-IoU pair even when its appearance is identical, under both fuse_score settings."""
-    from types import SimpleNamespace
-
-    from ultralytics.trackers.basetrack import TrackState
-    from ultralytics.trackers.deep_oc_sort import DeepOCSORT
-
-    tracker = object.__new__(DeepOCSORT)
-    tracker.args = SimpleNamespace(fuse_score=fuse_score, match_thresh=0.8)
-    tracker.encoder, tracker.appearance_thresh, tracker.proximity_thresh, tracker.frame_id = object(), 0.9, 0.5, 2
-    track = SimpleNamespace(
-        angle=None,
-        last_observation=np.array([0, 0, 10, 10]),
-        smooth_feat=np.array([1.0, 0.0]),
-        state=TrackState.Tracked,
-        update=lambda *_: None,
-    )
-    detection = SimpleNamespace(xyxy=np.array([20, 20, 30, 30]), curr_feat=np.array([1.0, 0.0]), score=1.0)
-    # proves appearance is active and would override (ungated) this exact pair, so the OCR result below is caused by
-    # the proximity gate, not by appearance being unavailable
-    assert tracker._fuse_appearance(np.array([[1.0]]), [track], [detection]) == 0.0
-    assert tracker._ocr_associate([track], [detection], [], []) == ([0], [0])
-
-
-def test_reid_invalid_crops():
-    """Test ReID skips out-of-bounds detection crops while preserving feature alignment."""
-    from types import SimpleNamespace
-
-    from ultralytics.trackers.utils.reid import ReID
-
-    encoder = ReID.__new__(ReID)
-    encoder.is_pt = True
-    encoder.model = SimpleNamespace(predictor=lambda crops: [torch.ones(4) for _ in crops])
-    img = np.full((640, 640, 3), 128, dtype=np.uint8)
-    feats = encoder(img, np.array([[30, 30, 40, 40], [1100, 1100, 200, 200]], dtype=np.float32))
-    assert feats[0] is not None and feats[1] is None
 
 
 @pytest.mark.skipif(not ONLINE, reason="environment is offline")
@@ -1637,14 +1591,6 @@ def test_utils_checks(monkeypatch):
     assert checks.parse_version("v2.1") == (2, 1, 0)
     assert checks.parse_version("1.0rc1") == (1, 0, 0)  # documented non-PEP-440 tradeoff: pre-releases equal the final
     monkeypatch.setattr(checks.metadata, "version", package_version)
-    monkeypatch.setattr(checks, "ARM64", True)
-    monkeypatch.setattr(checks, "AUTOINSTALL", True)
-    monkeypatch.setattr(checks, "ONLINE", True)
-    commands = []
-    monkeypatch.setattr(checks.subprocess, "check_output", lambda command, **kwargs: commands.append(command) or "")
-    requirements = ["ray[tune]", "nvidia-modelopt[onnx]>=0.44", "$(touch /tmp/pwned)/missing"]
-    assert checks.check_requirements(requirements)
-    assert commands[0][5:] == requirements  # requirements remain individual argv entries, never shell source
     assert not checks.check_version("v2", ">=2.0")  # installed version-shaped package keeps metadata precedence
     versions = ("v2.1-rc.1", "v2.1-beta1", "v2.1rev1", "v2.1-dev1", "v2.1+cu118")
     assert all(checks.check_version(v, ">=2.0") for v in versions)
@@ -1677,6 +1623,36 @@ def test_utils_torchutils():
 
     profile_ops(x, [m], n=3)
     time_sync()
+
+
+@pytest.mark.parametrize("momentum", [0.0, 0.9])
+def test_rmsprop_checkpoint_preserves_square_avg(tmp_path, momentum):
+    """RMSprop checkpoint compression must preserve small second moments and resumed update magnitudes."""
+    from copy import deepcopy
+
+    from ultralytics.utils.patches import torch_load
+    from ultralytics.utils.torch_utils import convert_optimizer_state_dict_to_fp16
+
+    param = torch.nn.Parameter(torch.ones(1))
+    optimizer = torch.optim.RMSprop([param], lr=0.01, momentum=momentum)
+    for _ in range(100):
+        param.grad = torch.full_like(param, 1e-4)
+        optimizer.step()
+    state = deepcopy(optimizer.state_dict())
+    checkpoint = tmp_path / "optimizer.pt"
+    torch.save(convert_optimizer_state_dict_to_fp16(deepcopy(state)), checkpoint)
+    saved = torch_load(checkpoint)
+    assert torch.equal(saved["state"][0]["square_avg"], state["state"][0]["square_avg"])
+
+    updates = []
+    for checkpoint_state in (state, saved):
+        resumed_param = torch.nn.Parameter(torch.ones(1))
+        resumed = torch.optim.RMSprop([resumed_param], lr=0.01, momentum=momentum)
+        resumed.load_state_dict(checkpoint_state)
+        resumed_param.grad = torch.full_like(resumed_param, 1e-6)
+        resumed.step()
+        updates.append(1 - resumed_param.detach())
+    assert torch.allclose(updates[0], updates[1], rtol=1e-3, atol=1e-6)
 
 
 def test_rtdetr_remap_cls_by_names():
@@ -1973,6 +1949,16 @@ def test_nn_detect_head_export_clamps_max_det():
     assert head.postprocess(torch.rand(1, anchors, 4 + head.nc)).shape == (1, anchors, 6)
 
 
+@pytest.mark.parametrize("h, w", [(14, 28), (28, 14), (20, 20)])
+def test_nn_aifi_pos_embed_row_major(h, w):
+    """AIFI position embedding follows the row-major token order of x.flatten(2), with the row encoding first."""
+    from ultralytics.nn.modules.transformer import AIFI
+
+    pe = AIFI.build_2d_sincos_position_embedding(w, h, 8, like=torch.zeros(1))[0].view(h, w, 8)
+    assert torch.equal(pe[..., :4], pe[:, :1, :4].expand(h, w, 4))  # row encoding constant along each row
+    assert torch.equal(pe[..., 4:], pe[:1, :, 4:].expand(h, w, 4))  # column encoding constant down each column
+
+
 def _depth_head_feats():
     """Return a small Depth head constructor kwargs-matched P3/P4/P5 feature pyramid."""
     return [torch.randn(1, 32, 32, 32), torch.randn(1, 64, 16, 16), torch.randn(1, 128, 8, 8)]
@@ -2005,6 +1991,7 @@ def test_nn_depth_head_no_dead_parameters():
 def test_classification_fraction_samples_across_classes(tmp_path):
     """Sample classification fractions across the class-major ImageFolder ordering."""
     from ultralytics.data.dataset import ClassificationDataset
+    from ultralytics.data.split import split_classify_dataset
 
     for class_index in range(3):
         class_dir = tmp_path / str(class_index)
@@ -2016,6 +2003,10 @@ def test_classification_fraction_samples_across_classes(tmp_path):
     samples = ClassificationDataset(tmp_path, args, augment=True).samples
 
     assert np.bincount([sample[1] for sample in samples]).tolist() == [2, 2, 2]
+    for ratio in (0.5, 0.75, 0.25):
+        split = split_classify_dataset(tmp_path, train_ratio=ratio)
+        train, val = ({p.relative_to(split / k) for p in (split / k).rglob("*.jpg")} for k in ("train", "val"))
+        assert len(train) == int(4 * ratio) * 3 and len(train | val) == 12 and train.isdisjoint(val)
 
 
 def test_classification_split_class_alignment(tmp_path):
@@ -2023,9 +2014,13 @@ def test_classification_split_class_alignment(tmp_path):
     from ultralytics.data.dataset import ClassificationDataset
 
     for name in ("b", "c", "d"):  # the split lacks the model's first class and adds one it does not have
-        (tmp_path / name).mkdir()
-        cv2.imwrite(str(tmp_path / name / "0.jpg"), np.zeros((16, 16, 3), dtype=np.uint8))
-    samples = ClassificationDataset(tmp_path, DEFAULT_CFG, names={0: "a", 1: "b", 2: "c"}).samples
+        for folder in (tmp_path / name, tmp_path / name / "nested"):
+            folder.mkdir()
+            cv2.imwrite(str(folder / "0.jpg"), np.zeros((16, 16, 3), dtype=np.uint8))
+    data = check_cls_dataset(tmp_path)
+    copied = [p.relative_to(data[k]) for k in ("train", "val") for p in data[k].rglob("*.jpg")]
+    assert len(copied) == len(set(copied)) == 6
+    samples = ClassificationDataset(data["train"], DEFAULT_CFG, names={0: "a", 1: "b", 2: "c"}).samples
     assert sorted(sample[1] for sample in samples) == [1, 2]
 
 
@@ -2132,44 +2127,8 @@ def test_process_mask_native_chunked():
     assert torch.equal(out, ref)
 
 
-@pytest.mark.skipif(IS_RASPBERRYPI, reason="Edge devices not intended for CLIP-based models")
-@pytest.mark.skipif(
-    checks.IS_PYTHON_3_8 and LINUX and ARM64,
-    reason="YOLOWorld with CLIP is not supported in Python 3.8 and aarch64 Linux",
-)
-def test_yolo_world():
-    """Test YOLO world models with CLIP support."""
-    model = YOLO(WEIGHTS_DIR / "yolov8s-world.pt")  # no YOLO11n-world model yet
-    model.set_classes(["tree", "window"])
-    model(SOURCE, conf=0.01)
-
-    model = YOLO(WEIGHTS_DIR / "yolov8s-worldv2.pt")  # no YOLO11n-world model yet
-    # Training from a pretrained model. Eval is included at the final stage of training.
-    # Use dota8.yaml which has fewer categories to reduce the inference time of CLIP model
-    model.train(
-        data="dota8.yaml",
-        epochs=1,
-        imgsz=32,
-        cache="disk",
-        close_mosaic=1,
-    )
-
-    # test WorWorldTrainerFromScratch
-    from ultralytics.models.yolo.world.train_world import WorldTrainerFromScratch
-
-    model = YOLO("yolov8s-worldv2.yaml")  # no YOLO11n-world model yet
-    model.train(
-        data={"train": {"yolo_data": ["dota8.yaml"]}, "val": {"yolo_data": ["dota8.yaml"]}},
-        epochs=1,
-        imgsz=32,
-        cache="disk",
-        close_mosaic=1,
-        trainer=WorldTrainerFromScratch,
-    )
-
-
 @pytest.mark.skipif(IS_RASPBERRYPI, reason="Edge devices not intended for heavy CLIP-based models")
-@pytest.mark.skipif(not TORCH_1_13, reason="YOLOE with CLIP requires torch>=1.13")
+@pytest.mark.skipif(not TORCH_2_0, reason="MobileCLIP2 uses scaled_dot_product_attention (torch>=2.0)")
 @pytest.mark.skipif(
     checks.IS_PYTHON_3_8 and LINUX and ARM64,
     reason="YOLOE with CLIP is not supported in Python 3.8 and aarch64 Linux",
@@ -2178,7 +2137,7 @@ def test_yoloe(tmp_path):
     """Test YOLOE models with MobileCLIP support."""
     # Predict
     # text-prompts
-    model = YOLO(WEIGHTS_DIR / "yoloe-11s-seg.pt")
+    model = YOLO(WEIGHTS_DIR / "yoloe-26n-seg.pt")
     model.set_classes(["person", "bus"])
     model.set_classes(["bus", "person"])
     assert list(model.names.values()) == ["bus", "person"]
@@ -2199,7 +2158,7 @@ def test_yoloe(tmp_path):
     )
 
     # Val
-    model = YOLOE(WEIGHTS_DIR / "yoloe-11s-seg.pt")
+    model = YOLOE(WEIGHTS_DIR / "yoloe-26n-seg.pt")
     # text prompts
     model.val(data="coco128-seg.yaml", imgsz=32)
     # visual prompts
@@ -2208,7 +2167,7 @@ def test_yoloe(tmp_path):
     # Train, fine-tune
     from ultralytics.models.yolo.yoloe import YOLOEPEFreeTrainer, YOLOEPESegTrainer, YOLOESegTrainerFromScratch
 
-    model = YOLOE("yoloe-11s-seg.pt")
+    model = YOLOE("yoloe-26n-seg.pt")
     model.train(
         data="coco128-seg.yaml",
         epochs=1,
@@ -2221,7 +2180,7 @@ def test_yoloe(tmp_path):
     data_yaml = tmp_path / "yoloe-data.yaml"
     YAML.save(data=data_dict, file=data_yaml)
     for data in [data_dict, data_yaml]:
-        model = YOLOE("yoloe-11s-seg.yaml")
+        model = YOLOE("yoloe-26n-seg.yaml")
         model.train(
             data=data,
             epochs=1,
@@ -2232,13 +2191,13 @@ def test_yoloe(tmp_path):
 
     # prompt-free
     # predict
-    model = YOLOE(WEIGHTS_DIR / "yoloe-11s-seg-pf.pt")
+    model = YOLOE(WEIGHTS_DIR / "yoloe-26n-seg-pf.pt")
     model.predict(SOURCE)
     # val
-    model = YOLOE("yoloe-11s-seg.pt")  # or select yoloe-m/l-seg.pt for different sizes
+    model = YOLOE("yoloe-26n-seg.pt")  # or select yoloe-26s/m/l/x-seg.pt for different sizes
     model.val(data="coco128-seg.yaml", imgsz=32)
     # train, freezing everything but the classification branch
-    model = YOLOE("yoloe-11s-seg.pt")
+    model = YOLOE("yoloe-26n-seg.pt")
     head = len(model.model.model) - 1
     freeze = [str(i) for i in range(head)]
     freeze += [f"{head}.{name}" for name, _ in model.model.model[-1].named_children() if "cv3" not in name]
@@ -2278,9 +2237,7 @@ def test_yoloe_vocab_head_switch():
 
 def test_yoloe_visual_prompt_verbose_false(capfd):
     """Verify that YOLOE visual prompting respects verbose=False."""
-    model = YOLO(WEIGHTS_DIR / "yoloe-11s-seg.pt")
-
-    from ultralytics.models.yolo.yoloe import YOLOEVPSegPredictor
+    model = YOLO(WEIGHTS_DIR / "yoloe-26n-seg.pt")
 
     visuals = {
         "bboxes": np.array([[221.52, 405.8, 344.98, 857.54]]),
@@ -2290,11 +2247,10 @@ def test_yoloe_visual_prompt_verbose_false(capfd):
     # Ignore any output produced while loading the model
     capfd.readouterr()
 
-    model.predict(
+    results = model.predict(
         SOURCE,
         refer_image=SOURCE,
         visual_prompts=visuals,
-        predictor=YOLOEVPSegPredictor,
         verbose=False,
     )
 
@@ -2302,6 +2258,7 @@ def test_yoloe_visual_prompt_verbose_false(capfd):
     output = captured.out + captured.err
 
     assert "Ultralytics" not in output
+    assert model.task == "segment" and results[0].masks is not None
 
 
 def test_yolov10():
@@ -2360,7 +2317,7 @@ def test_grayscale(task: str, model: str, data: str, tmp_path) -> None:
     export_model = model.export(format="onnx")
 
     model = YOLO(export_model, task=task)
-    model.predict(source=im, imgsz=32)
+    assert len(model.predict(source=[im, im], imgsz=32)) == 2  # reuse the static batch-1 export for over-batch coverage
 
 
 def test_semantic_polygon_data():

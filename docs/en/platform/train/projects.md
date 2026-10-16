@@ -11,19 +11,13 @@ keywords: Ultralytics Platform, projects, model management, experiment tracking,
 [Ultralytics Platform](https://platform.ultralytics.com) projects provide an effective solution for organizing and managing your models. Group related models together to facilitate easier management, comparison, and development.
 
 ```mermaid
-graph TB
-    P[Project]:::start --> M1[Model 1]:::proc
-    P --> M2[Model 2]:::proc
-    P --> M3[Model 3]:::proc
-    M1 --> S[Check in Sidebar]:::proc
+flowchart TD
+    P([Project]) --> M1[Model 1]
+    P --> M2[Model 2]
+    M1 --> S[Check in the sidebar]
     M2 --> S
-    M3 --> S
-    S --> C[Charts]:::out
-    S --> T[Comparison Table]:::out
-
-    classDef start fill:#4CAF50,color:#fff
-    classDef proc fill:#2196F3,color:#fff
-    classDef out fill:#9C27B0,color:#fff
+    S --> C[Charts]
+    S --> T[Comparison table]
 ```
 
 ## Create Project
@@ -57,7 +51,7 @@ The project page has two main areas:
 | **Models Sidebar** | Resizable list of all models in the project, with checkboxes for chart selection |
 | **Main Panel**     | Charts dashboard or comparison table (toggle between views)                      |
 
-A controls row above both areas holds the model search box, the **Diff** toggle (table view only, badged with how many columns differ), the view-options dropdown, and the view-mode toggle.
+A controls row above both areas holds the model search box, **Compare with AI** (Editor role or higher, once the project has two or more completed models), the **Diff** toggle (table view only, badged with how many columns differ), the view-options dropdown, and the view-mode toggle.
 
 ![Ultralytics Platform Project Page Sidebar And Charts](https://cdn.ul.run/i/4ebc844d81876e0499e28cf106859b4a.avif)<!-- screenshot -->
 
@@ -152,6 +146,9 @@ Clone a public project to your own account:
     Cloned projects inherit the source project's visibility by default (so cloning a public project creates a public clone), and you can choose Public or Private in the clone dialog before confirming. Enterprise workspaces default new clones to private. The clone count is displayed on the original project. If the original has a copyleft license (e.g., AGPL-3.0), the clone inherits and locks that license.
 
 ## Compare Models
+
+Click **Compare with AI** to have [Ask AI](autotrain.md) compare the project's trained models, recommend the best fit,
+and say whether another training run is worth it. It asks before starting any training.
 
 ### Charts Dashboard
 

@@ -708,7 +708,7 @@ class Results(SimpleClass, DataExportMixin):
             return f"{', '.join(f'{self.names[j]} {self.probs.data[j]:.2f}' for j in self.probs.top5)}, "
         if boxes:
             counts = torch.as_tensor(boxes.cls, dtype=torch.int64).bincount()  # no-op for torch, converts numpy()
-            return "".join(f"{n} {self.names[i]}{'s' * (n > 1)}, " for i, n in enumerate(counts) if n > 0)
+            return "".join(f"{n} {self.names[i]}{'s' * (n > 1)}, " for i, n in enumerate(counts.tolist()) if n > 0)
         if self.depth is not None:
             d = self.depth.data
             d = d[d > 0]
@@ -804,16 +804,14 @@ class Results(SimpleClass, DataExportMixin):
             ...     result.save_crop(save_dir="path/to/crops", file_name="detection")
 
         Notes:
-            - This method does not support Semantic Segmentation, Depth, Classify, or Oriented Bounding Box (OBB) tasks.
+            - This method does not support Semantic Segmentation, Depth, or Classify tasks.
             - Crops are saved as 'save_dir/class_name/file_name.jpg'.
+            - OBB crops follow the box rotation and fill areas outside the source image with black.
             - The method will create necessary subdirectories if they don't exist.
             - Original image is copied before cropping to avoid modifying the original.
         """
         if self.probs is not None:
             LOGGER.warning("Classify task does not support `save_crop`.")
-            return
-        if self.obb is not None:
-            LOGGER.warning("OBB task does not support `save_crop`.")
             return
         if self.semantic_mask is not None:
             LOGGER.warning("Semantic Segmentation task does not support `save_crop`.")
@@ -821,9 +819,9 @@ class Results(SimpleClass, DataExportMixin):
         if self.depth is not None:
             LOGGER.warning("Depth task does not support `save_crop`.")
             return
-        for d in self.boxes.cpu():  # one host transfer avoids per-box GPU syncs in the loop below
+        for d in (self.obb if self.obb is not None else self.boxes).cpu():  # one host transfer avoids per-box GPU syncs
             save_one_box(
-                d.xyxy,
+                d.xyxyxyxy if self.obb is not None else d.xyxy,
                 self.orig_img.copy(),
                 file=Path(save_dir) / self.names[int(d.cls.item())] / Path(file_name).with_suffix(".jpg"),
                 BGR=True,

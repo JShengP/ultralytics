@@ -17,27 +17,20 @@ keywords: Ultralytics Platform, monitoring, metrics, logs, deployment, performan
 The **Deployments** tab on your profile serves as the monitoring dashboard for all your deployments. It combines the world map, overview metrics, and deployment management in one view. See [Dedicated Endpoints](endpoints.md) for creating and managing deployments.
 
 ```mermaid
-graph TB
-    subgraph "Deployments Tab"
-        Map[World Map]:::proc --- Cards[Overview Cards]:::proc
-        Cards --- List[Deployments List]:::decide
+flowchart TD
+    subgraph tab["Deployments tab"]
+        direction TB
+        A[Overview cards] ~~~ B[World map]
+        B ~~~ C[Deployments list]
     end
-    subgraph "Deployment Page"
-        Metrics[Metrics Cards]:::out
-        Overview[Overview Tab: Endpoint and Health Check]:::out
-        Monitoring[Monitoring Tab]:::out
-        Predict[Predict Tab]:::out
-        Logs[Logs Tab]:::out
+    subgraph page["Deployment page"]
+        direction TB
+        D[Metrics cards] ~~~ E[Overview]
+        D ~~~ F[Monitoring]
+        E ~~~ G[Predict]
+        F ~~~ H[Logs]
     end
-    List --> Metrics
-    List --> Overview
-    List --> Monitoring
-    List --> Predict
-    List --> Logs
-
-    classDef proc fill:#2196F3,color:#fff
-    classDef decide fill:#FF9800,color:#fff
-    classDef out fill:#9C27B0,color:#fff
+    tab -->|open| page
 ```
 
 ### Overview Cards
@@ -97,9 +90,9 @@ Each deployment page shows real-time metrics above its `Overview`, `Monitoring`,
 | -------------------------- | -------------------------------------------------------------------- |
 | **HTTP Requests (24h)**    | Request count, including prediction, monitoring, and health requests |
 | **HTTP Error Rate (24h)**  | Share of 4xx and 5xx responses                                       |
-| **HTTP P95 Latency (24h)** | Average of hourly 95th-percentile latencies                          |
+| **HTTP P95 Latency (24h)** | 95th percentile of the 15-minute P95 latencies                       |
 
-Each card shows a sparkline and refreshes automatically, next to a card linking to the deployed model. Metrics are
+Each card shows a sparkline and refreshes every minute, next to a card linking to the deployed model. Metrics are
 collected only for deployments in the **Ready** state. On the Deployments tab, metrics are fetched for the 20 most
 recent deployments.
 
@@ -125,7 +118,7 @@ sending traffic.
 
 ## Monitoring Tab
 
-Open the deployment page of a **Ready** dedicated endpoint and select the **Monitoring** tab. Send an image through its **Predict** tab or endpoint API to populate **Temporary Examples** and **Prediction Statistics**. Before the first processed image, the tab shows **No images processed**.
+Open the deployment page of a **Ready** dedicated endpoint and select the **Monitoring** tab. Send an image through its **Predict** tab or endpoint API, or keep a [background camera](inference.md#background-camera) running, to populate **Temporary Examples** and **Prediction Statistics**. Before the first processed image, the tab shows **No images processed**.
 
 !!! note "Endpoint Eligibility"
 
