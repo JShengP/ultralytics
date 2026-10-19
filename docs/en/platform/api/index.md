@@ -1128,12 +1128,12 @@ POST /api/images/{imageId}/predict
 Runs the model on the image and returns predicted annotations. It does not save them — write the results back with
 `PATCH /api/images/{imageId}` when you are happy with them.
 
-| Field          | Type   | Required | Description                                                                                                                                                                                                                                                                                                                                                            |
-| -------------- | ------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `modelId`      | string | Yes      | Fully qualified model URI, `ul://{owner}/{project}/{model}`, or a class-prompted model ID for a detection dataset with 1–200 classes: a hosted model (`qwen`, `moondream`, `florence2`, `owlv2`, `yoloe26x`, `sam3`, `sam3.1`, `groundingdino`) or a paid provider model ID from the `modelId` enum in [`openapi.json`](https://platform.ultralytics.com/openapi.json) |
-| `confidence`   | float  | No       | Confidence threshold, 0.01 – 1.0 (default: 0.25); ignored by class-prompted models, which use model-specific thresholds                                                                                                                                                                                                                                                |
-| `iou`          | float  | No       | IoU threshold for non-maximum suppression, 0.0 – 0.95 (default: 0.7); ignored by class-prompted models                                                                                                                                                                                                                                                                 |
-| `classMapping` | array  | No       | For a YOLO model, the dataset class index for each model class in order, or `null` to drop that class; a wrong length or an index outside the dataset classes returns `400`. Ignored by class-prompted models                                                                                                                                                          |
+| Field          | Type   | Required | Description                                                                                                                                                                                                                                                                                                                                                                                 |
+| -------------- | ------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `modelId`      | string | Yes      | Fully qualified model URI, `ul://{owner}/{project}/{model}`, or a class-prompted model ID for a detection dataset with 1–200 classes: a hosted model (`qwen`, `gemma`, `nemotron`, `moondream`, `florence2`, `owlv2`, `yoloe26x`, `sam3`, `sam3.1`, `groundingdino`) or a paid provider model ID from the `modelId` enum in [`openapi.json`](https://platform.ultralytics.com/openapi.json) |
+| `confidence`   | float  | No       | Confidence threshold, 0.01 – 1.0 (default: 0.25); ignored by class-prompted models, which use model-specific thresholds                                                                                                                                                                                                                                                                     |
+| `iou`          | float  | No       | IoU threshold for non-maximum suppression, 0.0 – 0.95 (default: 0.7); ignored by class-prompted models                                                                                                                                                                                                                                                                                      |
+| `classMapping` | array  | No       | For a YOLO model, the dataset class index for each model class in order, or `null` to drop that class; a wrong length or an index outside the dataset classes returns `400`. Ignored by class-prompted models                                                                                                                                                                               |
 
 **Response:** `success`, `predictions` (annotation objects), `confidences` (index-aligned scores, empty for class-prompted models), `modelUsed`, `inferenceTime`, for class-prompted models `partial` (`true` when a generative model's truncated output returned only the complete boxes), and, for paid provider models, an optional `cost` (the estimated provider cost in USD billed to your provider key, omitted when no estimate is available). A YOLO model whose classes do not match the dataset returns `422`, as does a class-prompted model on a non-detection dataset or one outside 1–200 classes, and a paid provider model without a provider key saved in the dataset workspace's **Settings > API Keys** (`code`: `missing_provider_api_key`). A provider error carries the provider's message: `422` when the provider answers `400`, `401`, `402`, `403`, or `404` (a rejected key, model, or request, or an unpaid provider balance; `code`: `provider_refused` for all but `400`), `429` for its rate limit, and `503` for any other provider error. Depth datasets return `400`, and datasets on connected storage or with more than 3 image channels return `409`.
 
@@ -1339,7 +1339,8 @@ Accepted fields: `name`, `description`, `visibility`, `metadata`, `tags`, `licen
 ```
 
 Send an empty `metadata` object (`{}`) to clear it. Project metadata uses the same 128-character key and
-500,000-character serialized-object limits as dataset metadata.
+500,000-character serialized-object limits as dataset metadata. A `name` change that changes the slug returns `409`
+while any model in the project is starting training.
 
 ### Delete Project
 
@@ -1446,7 +1447,8 @@ PATCH /api/models/{owner}/{project}/{model}
 Accepted fields include `name`, `description`, `color`, `metadata`, `status`, `license`, `datasetSlug`, `trainArgs`,
 `trainResults`, `epochs`, `bestEpoch`, `bestFitness`, `version`, `trainingError`, and `starred`. Passing `projectId` on its
 own moves the model into another project of the same owner; the response returns the model's `slug` in the destination,
-`renamed: true` when that slug was already taken there, and `409` while the model is still training.
+`renamed: true` when that slug was already taken there, and `409` while the model is still training. A `name` change
+that changes the slug returns `409` while training is starting.
 
 ```json
 {
@@ -1788,7 +1790,7 @@ Each format honors only the options in its **Arguments** column of the export ta
 YOLO11 sizes other than nano return `400`.
 
 **Response (`201`):** `id`, `format`, `status` (`queued` or `running`), `region`, and `gpuType` for TensorRT exports.
-An equivalent export that is already in flight returns `409`.
+While an export of the same format is in flight for the model, a new request returns `409` whatever its `args`.
 
 **Supported Formats:**
 
